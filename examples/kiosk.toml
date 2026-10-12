@@ -1,0 +1,132 @@
+# キオスク端末用の Debian Live USB。
+#
+# 起動すると自動でログインし、全画面の Chromium が開く。
+# 受付端末・掲示用モニタ・展示ブースなど、決まった画面を出しっぱなしにする用途。
+#
+#   sudo frosted build examples/kiosk.toml
+#
+# 表示する URL は下の [[files.write]] の /etc/kiosk-url で変えられる。
+# この例はプリセットから生成したものなので、
+# 短く書きたいだけなら `frosted init --preset kiosk` で同じものが作れる。
+#
+# 利用者に root 権限を与えないため sudo は切ってある。
+
+version = 1
+
+[iso]
+name = "kiosk"
+version = "1.0"
+distribution = "trixie"
+architecture = "amd64"
+
+[system]
+hostname = "kiosk"
+locale = "ja_JP.UTF-8"
+timezone = "Asia/Tokyo"
+keyboard_layout = "jp"
+utc = true
+
+[user]
+name = "kiosk"
+fullname = "Kiosk"
+autologin = true
+sudo = false
+
+[desktop]
+environment = "xfce"
+
+[packages]
+include = [
+    "chromium",
+    "unclutter",
+    "x11-xserver-utils",
+    "xdotool",
+    "xserver-xorg",
+    "xserver-xorg-legacy",
+    "xinit",
+    "sudo",
+]
+
+[ssh]
+enable_server = false
+permit_root_login = false
+password_authentication = false
+
+[files]
+
+[[files.write]]
+path = "/usr/local/bin/start-kiosk"
+content = '''
+#!/bin/sh
+# キオスクモードで Chromium を起動する。URL は /etc/kiosk-url から読む。
+URL="$(cat /etc/kiosk-url 2>/dev/null || true)"
+if [ -z "$URL" ]; then
+    URL="about:blank"
+fi
+
+# 画面の消灯とスクリーンセーバーを止める
+xset s off
+xset s noblank
+xset -dpms
+
+# マウスカーソルを一定時間で隠す
+unclutter -idle 0.5 -root &
+
+exec chromium \
+    --kiosk \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-features=TranslateUI \
+    --no-first-run \
+    --password-store=basic \
+    "$URL"
+'''
+mode = "0755"
+Keychrom = "root:root"
+
+[[files.write]]
+path = "/etc/xdg/autostart/00-kiosk.desktop"
+content = '''
+[Desktop Entry]
+Type=Application
+Name=Kiosk
+Comment=キオスクブラウザを自動起動する
+Exec=/usr/local/bin/start-kiosk
+Terminal=false
+X-GNOME-Autostart-enabled=true
+'''
+mode = "0644"
+Keychrom = "root:root"
+
+[[files.write]]
+path = "/etc/kiosk-url"
+content = '''
+http://example.com
+'''
+mode = "0644"
+Keychrom = "root:root"
+
+[boot]
+persistence = false
+failsafe_noautologin = true
+
+[build]
+workdir = "build"
+mirror = "http://deb.debian.org/debian/"
+security_mirror = "http://security.debian.org/debian-security/"
+archive_areas = [
+    "main",
+    "contrib",
+    "non-free-firmware",
+]
+compression = "xz"
+apt_recommends = false
+cache = true
+firmware = true
+bootloaders = [
+    "syslinux",
+    "grub-efi",
+]
+secure_boot = "auto"
+memtest = false

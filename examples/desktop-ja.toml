@@ -1,0 +1,61 @@
+# 日本語デスクトップの Debian Live USB。
+#
+# Xfce + Firefox + LibreOffice に加えて、日本語フォントと
+# かな漢字変換 (fcitx5 + mozc) を入れてある。
+# 普段使いの持ち運び環境や、人に渡す配布物に向く。
+#
+#   sudo frosted build examples/desktop-ja.toml
+#
+# イメージは 1.5GB 前後になる。
+
+version = 1
+
+[iso]
+name = "desktop-ja"
+version = "1.0"
+distribution = "trixie"
+architecture = "amd64"
+
+[system]
+hostname = "live"
+locale = "ja_JP.UTF-8"
+timezone = "Asia/Tokyo"
+keyboard_layout = "jp"
+
+[user]
+name = "user"
+fullname = "Live User"
+autologin = true
+sudo = true
+
+[desktop]
+environment = "xfce"
+extra_packages = [
+    "firefox-esr",
+    "libreoffice",
+    "vlc",
+    "evince",
+    "gimp",
+    "file-roller",
+    "thunar",
+    "mousepad",
+    # 日本語環境
+    "fonts-noto-cjk",
+    "fonts-noto-color-emoji",
+    "fonts-vlgothic",
+    "fcitx5",
+    "fcitx5-mozc",
+    "fcitx5-frontend-gtk3",
+    "fcitx5-frontend-gtk4",
+    "fcitx5-frontend-qt5",
+    "manpages-ja",
+]
+
+[boot]
+# 起動時のメッセージを静かにして、スプラッシュを出す
+append = "quiet splash"
+
+[build]
+compression = "xz"
+apt_recommends = false
+cache = true

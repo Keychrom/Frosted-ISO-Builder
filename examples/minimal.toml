@@ -1,0 +1,37 @@
+# 最小構成の Debian Live ISO。
+#
+# まずはこれでビルドが通ることを確かめるのがおすすめ。
+# CUI だけの素の Debian が起動する。デスクトップも入らないので
+# ビルドが速く、イメージも小さい (だいたい 400MB 前後)。
+#
+#   sudo frosted build examples/minimal.toml
+
+version = 1
+
+[iso]
+name = "minimal"
+version = "1.0"
+# trixie = Debian 13 (現行)、bookworm = Debian 12
+distribution = "trixie"
+architecture = "amd64"
+
+[system]
+hostname = "minimal"
+# C.UTF-8 はどの環境でも確実に使えるので、最小構成の確認にはこれで十分
+locale = "C.UTF-8"
+timezone = "UTC"
+keyboard_layout = "us"
+
+[user]
+name = "user"
+autologin = true
+sudo = true
+
+[desktop]
+# none = デスクトップ環境なし (CUI のみ)
+environment = "none"
+
+[build]
+compression = "xz"
+# キャッシュを残すと 2 回目以降のビルドが大幅に速くなる
+cache = true

@@ -1,0 +1,93 @@
+# 配布用の ISO を作るためのレシピの例。
+#
+# 人に配る・公開する場合は、イメージ本体だけでなく「誰が作ったか」「何が入って
+# いるか」が分かる必要がある。この例はその一式を設定したもの。
+#
+#   sudo frosted build examples/release.toml --sign you@example.com
+#
+# ビルドすると、ISO の隣に次のものができる:
+#
+#   mydistro-1.0-amd64.iso                  イメージ本体
+#   mydistro-1.0-amd64.iso.sha256           この ISO のチェックサム
+#   SHA256SUMS                              まとめて検証する用
+#   mydistro-1.0-amd64.iso.build-info.json  何をどうやって作ったかの記録
+#   mydistro-1.0-amd64.iso.asc              GPG 署名 (--sign を付けたときだけ)
+#
+# 受け取った人はこうやって検証できる:
+#
+#   frosted verify mydistro-1.0-amd64.iso
+
+version = 1
+
+[iso]
+name = "mydistro"
+version = "1.0"
+distribution = "trixie"
+architecture = "amd64"
+
+# ここが重要。ISO の中に記録され、受け取った人が
+#   isoinfo -d -i mydistro-1.0-amd64.iso
+# で確認できる。自分の名前かプロジェクト名に書き換えること。
+publisher = "My Distro Project"
+preparer = "My Distro Project <contact@example.com>"
+
+[system]
+hostname = "mydistro"
+locale = "ja_JP.UTF-8"
+timezone = "Asia/Tokyo"
+keyboard_layout = "jp"
+
+[user]
+name = "user"
+fullname = "Live User"
+# 配布物にパスワードを埋め込む場合は必ず変更すること。
+# 空にしておけばパスワード無し + パスワード無し sudo になる (Debian の
+# 公式 Live イメージと同じ挙動)。
+password = ""
+autologin = true
+sudo = true
+
+[desktop]
+environment = "xfce"
+extra_packages = [
+    "firefox-esr",
+    "libreoffice",
+    "evince",
+    "file-roller",
+    "fonts-noto-cjk",
+    "fonts-noto-color-emoji",
+    "fcitx5",
+    "fcitx5-mozc",
+]
+
+# ライブ環境を名乗るためのファイルを差し替える。
+# ここも自分のプロジェクトに合わせて書き換えること。
+[[files.write]]
+path = "/etc/motd"
+content = '''
+ようこそ My Distro へ。
+
+このイメージは Live 環境です。ディスクには何も書き込まれません
+(永続化を有効にしている場合を除く)。
+
+インストールしたい場合は debian-installer 入りのイメージを使ってください。
+'''
+mode = "0644"
+Keychrom = "root:root"
+
+[[files.write]]
+path = "/etc/issue"
+content = "My Distro 1.0 \\n \\l\n"
+mode = "0644"
+Keychrom = "root:root"
+
+[build]
+compression = "xz"
+apt_recommends = false
+cache = true
+# UEFI と BIOS の両方で起動できるようにする。
+# 最近の実機はほぼ UEFI なので、確認は必ず両方で。
+bootloaders = ["syslinux", "grub-efi"]
+secure_boot = "auto"
+# メモリテストのエントリも入れておくと配布物として親切
+memtest = true

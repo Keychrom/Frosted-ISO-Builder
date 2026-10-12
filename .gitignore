@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ビルドの作業ディレクトリ。レシピごとに作られる。
+examples/build/
+/build/
+
+# ビルドの成果物
+*.iso
+*.iso.zsync
+*.contents
+*.files
+*.packages
+*.log
+.frosted-manifest.json
+
+# エディタ
+.vscode/
+.idea/
+*.swp

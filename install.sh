@@ -1,0 +1,108 @@
+#!/bin/sh
+# Frosted ISO Builder を Debian マシンにインストールする。
+#
+#   ./install.sh              本体だけ入れる (依存は自分で入れる)
+#   ./install.sh --with-deps  ビルドに必要なパッケージも apt で入れる
+#   ./install.sh --uninstall  入れたものを消す
+#
+# PREFIX を変えるとインストール先を変更できる (既定: /usr/local)。
+
+set -eu
+
+PREFIX="${PREFIX:-/usr/local}"
+LIBDIR="$PREFIX/lib/frosted"
+BINDIR="$PREFIX/bin"
+
+# ビルドに必要なパッケージ。live-build 自体が依存で引っ張るものも多いが、
+# BIOS/UEFI 両対応のためにブートローダ一式を明示しておく。
+DEPS="live-build debootstrap xorriso squashfs-tools cpio rsync uuid-runtime \
+mtools dosfstools syslinux-common isolinux grub-efi-amd64-bin grub-pc-bin \
+fakeroot gnupg"
+
+WITH_DEPS=0
+UNINSTALL=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --with-deps) WITH_DEPS=1 ;;
+        --uninstall) UNINSTALL=1 ;;
+        -h|--help)
+            sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *)
+            echo "知らないオプションです: $arg" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$UNINSTALL" = "1" ]; then
+    echo "アンインストールします..."
+    rm -rf "$LIBDIR"
+    rm -f "$BINDIR/frosted"
+    echo "完了しました。"
+    exit 0
+fi
+
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+if [ ! -f "$REPO_ROOT/frosted/cli.py" ]; then
+    echo "エラー: このスクリプトはリポジトリのルートで実行してください。" >&2
+    exit 1
+fi
+
+if [ "$WITH_DEPS" = "1" ]; then
+    if [ "$(id -u)" != "0" ]; then
+        echo "エラー: --with-deps は root で実行してください (sudo ./install.sh --with-deps)" >&2
+        exit 1
+    fi
+    echo "必要なパッケージを入れます..."
+    # shellcheck disable=SC2086
+    apt-get update
+    # shellcheck disable=SC2086
+    apt-get install -y $DEPS
+fi
+
+if [ "$(id -u)" = "0" ]; then
+    SUDO=""
+else
+    if command -v sudo >/dev/null 2>&1; then
+        SUDO="sudo"
+    else
+        echo "エラー: $PREFIX に書き込むには root 権限が必要です。" >&2
+        echo "       root で実行するか、sudo を入れてください。" >&2
+        exit 1
+    fi
+fi
+
+echo "インストール先: $LIBDIR"
+$SUDO mkdir -p "$LIBDIR" "$BINDIR"
+
+# ソースをコピーする。Python のキャッシュは持っていかない。
+$SUDO rm -rf "$LIBDIR/frosted"
+$SUDO cp -r "$REPO_ROOT/frosted" "$LIBDIR/frosted"
+$SUDO find "$LIBDIR" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+
+LAUNCHER="$(mktemp)"
+cat > "$LAUNCHER" <<LAUNCHER_EOF
+#!/usr/bin/env python3
+import sys
+
+sys.path.insert(0, "$LIBDIR")
+
+from frosted.cli import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())
+LAUNCHER_EOF
+$SUDO install -m 0755 "$LAUNCHER" "$BINDIR/frosted"
+rm -f "$LAUNCHER"
+
+echo "完了しました。"
+echo
+echo "動作確認:"
+"$BINDIR/frosted" --version
+echo
+echo "次は環境を診断してみてください:"
+echo "  frosted doctor"

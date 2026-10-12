@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frosted-iso-builder"
+version = "0.1.0"
+description = "Build Debian Live ISOs from a single recipe file (a live-build wrapper)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["debian", "live", "iso", "live-build", "remaster", "respin"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Installation/Setup",
+    "Topic :: System :: Systems Administration",
+]
+
+# 実行時の依存は無し。TOML は標準ライブラリの tomllib で読む。
+dependencies = []
+
+[project.optional-dependencies]
+# 開発時のみ。テストは標準ライブラリの unittest で書いてある。
+dev = []
+
+[project.scripts]
+frosted = "frosted.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Keychrom/Frosted-ISO-Builder"
+Source = "https://github.com/Keychrom/Frosted-ISO-Builder"
+Issues = "https://github.com/Keychrom/Frosted-ISO-Builder/issues"
+
+[tool.setuptools]
+packages = ["frosted", "frosted.backend"]
+
+[tool.setuptools.package-data]
+frosted = ["py.typed"]

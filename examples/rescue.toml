@@ -1,0 +1,101 @@
+# レスキュー用の Debian Live USB。
+#
+# 壊れたマシンの救出やディスクの診断に使う。CUI のみだが、
+# パーティション操作・ファイルシステム修復・データ復旧・ネットワーク調査の
+# 道具を一通り積んである。SSH を有効にしてあるので、別のマシンから
+# 入って作業することもできる。
+#
+#   sudo frosted build examples/rescue.toml
+#
+# イメージをメモリに全部載せるので、起動後は USB を抜いても動く。
+# そのぶん RAM を 1GB 以上積んでいるマシンで使うこと。
+
+version = 1
+
+[iso]
+name = "rescue"
+version = "1.0"
+distribution = "trixie"
+architecture = "amd64"
+
+[system]
+hostname = "rescue"
+locale = "C.UTF-8"
+timezone = "Asia/Tokyo"
+keyboard_layout = "jp"
+
+[user]
+name = "rescue"
+fullname = "Rescue User"
+autologin = true
+sudo = true
+# SSH のパスワードログインを許すために設定している。
+# 配り歩くなら必ず変えること。ハッシュを書くこともできる
+# (openssl passwd -6 で作った $6$... をそのまま貼る)。
+password = "rescue"
+
+[desktop]
+environment = "none"
+
+[packages]
+include = [
+    # パーティション操作
+    "parted",
+    "gdisk",
+    "fdisk",
+    "testdisk",
+    # ファイルシステム
+    "dosfstools",
+    "e2fsprogs",
+    "xfsprogs",
+    "btrfs-progs",
+    "ntfs-3g",
+    "exfatprogs",
+    "squashfs-tools",
+    # 復旧
+    "gddrescue",
+    "partclone",
+    # ストレージの状態を見る
+    "smartmontools",
+    "hdparm",
+    "dmidecode",
+    "lshw",
+    "lvm2",
+    "mdadm",
+    "cryptsetup",
+    # ネットワーク調査
+    "nmap",
+    "tcpdump",
+    "sshfs",
+    # 作業用
+    "tmux",
+    "screen",
+    "mc",
+    "vim",
+    "unzip",
+    "p7zip-full",
+    # 遠隔操作
+    "openssh-server",
+]
+
+[ssh]
+enable_server = true
+# 鍵で入る場合はここに公開鍵のパスを並べる。指定すると
+# パスワード認証を切ってもログインできるようになる。
+#
+#   authorized_keys = ["~/.ssh/id_ed25519.pub"]
+#
+# 鍵を指定しない場合は上の user.password でログインする。
+authorized_keys = []
+permit_root_login = false
+password_authentication = true
+
+[boot]
+# イメージ全体を RAM に載せる。起動後は USB を抜ける。
+# RAM が 1GB 未満のマシンではこの行を消すこと。
+append = "toram"
+
+[build]
+archive_areas = ["main", "contrib", "non-free-firmware"]
+compression = "xz"
+cache = true

@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # 開発機 (Windows でも可) で回る範囲。標準ライブラリだけで動く。
+  unit:
+    name: 単体テスト (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: バージョン確認
+        run: python -c "import sys; print(sys.version)"
+
+      - name: 単体テスト
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: インストーラの構文確認
+        run: sh -n install.sh
+
+  # ここが本番。実際の live-build と突き合わせる。
+  # 生成した auto/config を lb config に食わせて、オプション名の綴りが
+  # 合っているか (実行時に解決する仕組みが効いているか) を確認する。
+  live-build:
+    name: live-build と突き合わせる
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      # コンテナ内で動くので、checkout より前に git を入れる必要がある。
+      # debian:trixie の最小イメージには git も ca-certificates も入っておらず、
+      # checkout は HTTPS で clone するため、この順序でないと必ず失敗する。
+      - name: git を入れる
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: 依存を入れる
+        run: apt-get install -y --no-install-recommends python3 live-build
+
+      - name: 環境を診断する
+        run: python3 bin/frosted doctor --no-network
+
+      - name: 単体テスト (lb がある状態で)
+        env:
+          # lb の導入に失敗したのに緑になるのを防ぐ
+          FROSTED_REQUIRE_LB: "1"
+        run: python3 -m unittest discover -s tests -t . -v
+
+      - name: 例がすべて生成できること
+        run: |
+          set -eu
+          for recipe in examples/*.toml; do
+            echo "::group::$recipe"
+            python3 bin/frosted gen "$recipe"
+            rm -rf examples/build
+            echo "::endgroup::"
+          done
+
+      - name: 生成物を引用符ごと確認する
+        run: |
+          python3 bin/frosted show examples/minimal.toml --lb-args
+
+  # Intel/AMD の実機向けに、ブートローダ一式を入れた状態でも確認する
+  bootloaders:
+    name: ブートローダ込みの確認
+    runs-on: ubuntu-latest
+    container: debian:trixie
+    steps:
+      - name: git を入れる
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: 依存を入れる
+        run: |
+          apt-get install -y --no-install-recommends \
+            python3 live-build xorriso squashfs-tools isolinux syslinux-common \
+            grub-efi-amd64-bin grub-pc-bin mtools dosfstools
+
+      - name: 必須ツールが揃っていること
+        run: python3 bin/frosted doctor --no-network

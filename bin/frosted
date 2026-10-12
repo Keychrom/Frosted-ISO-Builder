@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+"""リポジトリから直接実行するためのランチャー。
+
+インストールせずに試したいときは、これを PATH の通った場所に置くか、
+直接このファイルを叩けばよい。
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+# このファイルの 1 つ上がリポジトリのルート
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from frosted.cli import main  # noqa: E402  (sys.path を直してから読み込む)
+
+if __name__ == "__main__":
+    sys.exit(main())
