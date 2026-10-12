@@ -201,6 +201,10 @@ def _apt_hint(packages: list[str]) -> str:
         "mksquashfs": "squashfs-tools",
         "uuidgen": "uuid-runtime",
         "cpio": "cpio",
+        # コマンド名とパッケージ名が違うもの。chroot という名前の
+        # パッケージは存在しない (coreutils に入っている)。
+        "chroot": "coreutils",
+        "mount": "util-linux",
     }
     resolved: list[str] = []
     for command in packages:

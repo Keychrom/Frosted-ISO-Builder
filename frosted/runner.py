@@ -19,8 +19,37 @@ from pathlib import Path
 from .errors import BuildError
 
 
+#: PATH で見つからないときに探す標準のディレクトリ。
+#:
+#: Debian では /usr/sbin と /sbin が一般ユーザーの PATH に入っていない。
+#: debootstrap や chroot はそこにあり、root (と sudo の secure_path) には
+#: 入っているので、ビルド自体は問題なく走る。「インストールされているか」を
+#: 調べるこの関数が PATH だけを見ると、実際にはあるのに「無い」と誤判定して
+#: 利用者を無駄に悩ませる。実際にそれをやった。
+FALLBACK_DIRS: tuple[str, ...] = (
+    "/usr/local/sbin",
+    "/usr/local/bin",
+    "/usr/sbin",
+    "/usr/bin",
+    "/sbin",
+    "/bin",
+)
+
+
 def which(name: str) -> str | None:
-    return shutil.which(name)
+    """コマンドの場所を返す。
+
+    まず PATH、無ければ標準のディレクトリを見る。ビルドは sudo 経由で
+    走るので、PATH に無くてもそのディレクトリにあれば実行できる。
+    """
+    found = shutil.which(name)
+    if found is not None:
+        return found
+    for directory in FALLBACK_DIRS:
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
 
 
 def is_root() -> bool:
