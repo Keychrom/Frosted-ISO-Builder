@@ -137,12 +137,23 @@ class RecipeValidationTest(unittest.TestCase):
             ),
         )
 
-    def test_fullname_with_quote_is_rejected(self) -> None:
-        """user-fullname= はカーネルコマンドラインに載るので引用符を弾く。"""
+    def test_fullname_with_quote_is_accepted(self) -> None:
+        """fullname は起動後に設定するので、引用符は shlex.quote で守れる。"""
+        name = 'O\'Brien "Bob"'
+        recipe = Recipe.from_dict(
+            {"version": 1, "iso": {"name": "x"}, "user": {"fullname": name}}
+        )
+        self.assertEqual(recipe.user.fullname, name)
+        self.assertFalse(
+            any(issue.where == "user.fullname" for issue in recipe.warnings)
+        )
+
+    def test_fullname_with_colon_is_rejected(self) -> None:
+        """コロンは /etc/passwd の GECOS 区切りなので拒否する。"""
         self.assertIn(
             "user.fullname",
             self._errors(
-                {"version": 1, "iso": {"name": "x"}, "user": {"fullname": 'Bad "Name"'}}
+                {"version": 1, "iso": {"name": "x"}, "user": {"fullname": "Bad:Name"}}
             ),
         )
 

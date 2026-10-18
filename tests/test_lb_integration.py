@@ -144,6 +144,44 @@ class LbConfigAcceptanceTest(unittest.TestCase):
             recipe.iso.name = "citest"
             self._check(recipe)
 
+    def test_config_binary_is_sourceable(self) -> None:
+        """config/binary は lb build が source する。
+
+        bootappend に引用符が混じると、lb config は通るのに lb build が
+        `User ...: not found` で落ちる。ここで実際に source して確認する。
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe = Recipe()
+            recipe.path = Path(tmp) / "recipe.toml"
+            recipe.build.workdir = "build"
+            recipe.iso.name = "ci-bootappend"
+            recipe.user.fullname = "Live User"
+            recipe.boot.append = "quiet splash"
+            proc = self._run_lb_config(recipe)
+            self.assertEqual(
+                proc.returncode,
+                0,
+                f"lb config が失敗しました:\n{proc.stdout}\n{proc.stderr}",
+            )
+
+            config_file = recipe.workdir() / "config" / "binary"
+            self.assertTrue(config_file.is_file())
+            sourced = subprocess.run(
+                ["sh", "-c", ". ./config/binary"],
+                cwd=str(recipe.workdir()),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                errors="replace",
+            )
+            self.assertEqual(
+                sourced.returncode,
+                0,
+                "config/binary を source できません。\n"
+                f"--- stderr ---\n{sourced.stderr}\n"
+                f"--- config/binary ---\n{config_file.read_text(encoding='utf-8')}",
+            )
+
     def test_memtest_recipe_is_accepted(self) -> None:
         """memtest 有効時は --memtest memtest86+ を出す必要がある。"""
         with tempfile.TemporaryDirectory() as tmp:

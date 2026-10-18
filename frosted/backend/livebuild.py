@@ -183,7 +183,7 @@ class GenerationResult:
 #: パラメータの境界が壊れて起動しなくなる。
 _BOOTAPPEND_UNSAFE = re.compile(r"[\s\"'\\]")
 
-#: 引用符で囲って渡す値 (fullname と追加ブートパラメータ) 用。
+#: 利用者が追加するブートパラメータ用。
 #: 空白は値の区切りとして意味があるので残し、引用符と制御文字だけを落とす。
 _QUOTED_UNSAFE = re.compile(r"[\"'\\\r\n\t]")
 
@@ -207,11 +207,11 @@ def build_bootappend(recipe: Recipe) -> str:
 
     add("hostname", recipe.system.resolved_hostname())
     add("username", recipe.user.name)
-    if recipe.user.fullname:
-        # 空白入りの名前をそのまま渡したいのでダブルクォートで囲う。
-        cleaned = _QUOTED_UNSAFE.sub("", recipe.user.fullname).strip()
-        if cleaned:
-            params.append(f'user-fullname="{cleaned}"')
+    # fullname はカーネルコマンドラインに載せない。live-build は
+    # --bootappend-live の値を config/binary に引用符ごと書き出すが、
+    # 値の中の " をエスケープしないため、user-fullname="Live User" が
+    # config/binary を壊して `User ...: not found` でビルドが止まる。
+    # 起動後の frosted-boot-setup で usermod -c を使って設定する。
     add("locales", recipe.system.locale)
     add("timezone", recipe.system.timezone)
     add("keyboard-layouts", recipe.system.keyboard_layout)
@@ -368,6 +368,7 @@ def generate(recipe: Recipe) -> GenerationResult:
     result = GenerationResult(workdir=workdir, bootappend=build_bootappend(recipe))
 
     _clean_previous(workdir)
+    _remove_livebuild_config_files(workdir)
 
     lb_args, warnings = build_lb_args(recipe)
     result.warnings.extend(warnings)
@@ -452,6 +453,27 @@ def _clean_previous(workdir: Path) -> None:
             if not any(root_path.iterdir()):
                 root_path.rmdir()
         except OSError:
+            pass
+
+
+def _remove_livebuild_config_files(workdir: Path) -> None:
+    """live-build が書いた config 直下の設定ファイルを消す。
+
+    `lb config` は既存の config/binary などを読み込んでから書き直す。
+    以前のビルドで壊れた値が残っていると、新しい設定を書く前に
+    読み込みで失敗してしまう。生成し直すときは毎回消す。
+    config/package-lists などのサブディレクトリは残す。
+    """
+    config_dir = workdir / "config"
+    if not config_dir.is_dir():
+        return
+    for entry in config_dir.iterdir():
+        if not (entry.is_file() or entry.is_symlink()):
+            continue
+        try:
+            entry.unlink()
+        except OSError:
+            # 消せなくても次の lb config が上書きするので致命傷にしない
             pass
 
 
@@ -936,6 +958,7 @@ def _needs_boot_setup(recipe: Recipe) -> bool:
         or recipe.user.default_groups
         or recipe.ssh.authorized_keys
         or recipe.user.autologin
+        or recipe.user.fullname
         or recipe.scripts.firstboot
     )
 
@@ -990,6 +1013,18 @@ def _boot_setup_script(recipe: Recipe) -> str:
         "fi",
         "",
     ]
+
+    if recipe.user.fullname:
+        lines += [
+            "# --- フルネーム ---",
+            f"FULLNAME={shlex.quote(recipe.user.fullname)}",
+            'if usermod -c "${FULLNAME}" "${USERNAME}"; then',
+            '    log "フルネームを設定しました。"',
+            "else",
+            '    log "フルネームを設定できませんでした。"',
+            "fi",
+            "",
+        ]
 
     if recipe.user.autologin:
         lines += [

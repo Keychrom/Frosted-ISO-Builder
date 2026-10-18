@@ -854,16 +854,16 @@ def _user_from(data: dict[str, Any], issues: list[Issue]) -> UserSection:
         issues.append(
             Issue("error", "user.default_groups", "コロン (:) と改行は使えません。")
         )
-    # fullname はカーネルコマンドラインの user-fullname= に載る。
-    # 引用符や空白が混じるとパラメータの切れ目が壊れて起動しなくなる。
-    bad_fullname = sorted(set(section.fullname) & set("\"'\\\n:"))
+    # fullname は起動後の usermod -c で設定する。GECOS の区切りである
+    # コロンと改行だけを拒否する。引用符などは shlex.quote が守る。
+    bad_fullname = sorted(set(section.fullname) & set("\n\r:"))
     if bad_fullname:
         issues.append(
             Issue(
                 "error",
                 "user.fullname",
                 f"使えない文字が入っています: {' '.join(repr(c) for c in bad_fullname)}",
-                hint="引用符・バックスラッシュ・コロン・改行はブートパラメータを壊します。",
+                hint="コロンと改行は使えません。",
             )
         )
     # chpasswd は「ユーザー名:パスワード」の 1 行を読むので、コロンと改行が混じると壊れる

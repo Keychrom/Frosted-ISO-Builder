@@ -191,6 +191,26 @@ class TreeGenerationTest(unittest.TestCase):
             project.generate()
             self.assertFalse(stale.exists(), "使わなくなったファイルが残っている")
 
+    def test_regeneration_removes_stale_livebuild_config_files(self) -> None:
+        """前回の config/binary に壊れた値が残っていても再生成できること。"""
+        with Project(_basic_recipe()) as project:
+            project.generate()
+            stale = project.workdir() / "config" / "binary"
+            stale.write_text(
+                'LB_BOOTAPPEND_LIVE="bad user-fullname="Live User" \n',
+                encoding="utf-8",
+            )
+
+            project.generate()
+            self.assertFalse(
+                stale.exists(),
+                "古い config/binary が残っていて、次の lb config が壊れる",
+            )
+            # 生成物のサブディレクトリは消さない
+            self.assertTrue(
+                (project.workdir() / "config" / "package-lists").is_dir()
+            )
+
     def test_hooks_are_executable(self) -> None:
         if os.name == "nt":
             self.skipTest("Windows では実行ビットを検証できない")
@@ -696,15 +716,27 @@ class AutoConfigExecutionTest(unittest.TestCase):
             self.assertIn("quiet splash", value)
             self.assertNotIn("'", value, "引用符が値に残っている")
 
-    def test_fullname_keeps_its_kernel_quoting(self) -> None:
-        """user-fullname はカーネルコマンドライン上で引用符が要る。"""
+    def test_fullname_is_applied_at_boot_not_on_the_kernel_command_line(self) -> None:
+        """fullname をカーネル引数に載せると live-build の config が壊れる。"""
         recipe = _basic_recipe()
         recipe.user.fullname = "Live User"
         with Project(recipe) as project:
             project.generate()
             args = self._run(project)
             value = args[args.index("--bootappend-live") + 1]
-            self.assertIn('user-fullname="Live User"', value)
+            self.assertNotIn("user-fullname", value)
+            self.assertNotIn('"', value, "カーネル引数に引用符が残っている")
+
+            hook = (
+                project.workdir()
+                / "config"
+                / "hooks"
+                / "live"
+                / "0600-boot-setup.hook.chroot"
+            )
+            text = hook.read_text(encoding="utf-8")
+            self.assertIn("FULLNAME='Live User'", text)
+            self.assertIn('usermod -c "${FULLNAME}"', text)
 
     def test_iso_volume_is_set(self) -> None:
         recipe = _basic_recipe("mylinux")

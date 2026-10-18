@@ -577,6 +577,7 @@ EN: dict[str, str] = {
         "Only ASCII letters, digits and . _ + ~ - are allowed; "
         "spaces and / are not."
     ),
+    "コロンと改行は使えません。": "Colons and newlines are not allowed.",
     # ---- recipe.py: 旧フィールド名の移行 ---------------------------------
     "Keychrom は owner の旧名です。": "Keychrom is an old name for owner.",
     "owner に書き換えてください。": "Please rename it to owner.",
@@ -682,7 +683,10 @@ EN: dict[str, str] = {
     '# live-config がライブユーザーを作ったあとに 1 度だけ実行されます。': '# Runs once, after live-config has created the live user.',
     '# すべての操作は何度実行しても同じ結果になるように書いています。': '# Every step is written to be idempotent.',
         "# [daemon] セクションに自動ログインの設定を足す": "# Add autologin settings to the [daemon] section",
-'# --- 自動ログイン ---': '# --- autologin ---',
+    '# --- フルネーム ---': '# --- full name ---',
+    'log "フルネームを設定しました。"': 'log "set the user full name."',
+    'log "フルネームを設定できませんでした。"': 'log "failed to set the user full name."',
+    '# --- 自動ログイン ---': '# --- autologin ---',
 '# --- 自動ログイン用グループ ---': '# --- group for autologin ---',
     '# --- ライブユーザーができるのを待つ ---': '# --- wait for the live user ---',
     '# このユニットは After=live-config.service で順序を指定しているが、': '# This unit sets After=live-config.service, but',
