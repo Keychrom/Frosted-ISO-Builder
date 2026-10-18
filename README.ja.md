@@ -69,9 +69,21 @@ cd Frosted-ISO-Builder
 # 依存パッケージごと入れる場合 (推奨)
 sudo ./install.sh --with-deps
 
+# 任意ツール (QEMU/OVMF, zsync, apt-cacher-ng) も一緒に入れる場合
+sudo ./install.sh --with-deps --with-additional
+
+# 任意ツールだけあとから足す場合
+sudo ./install.sh --with-additional
+
 # 依存は自分で入れる場合
 sudo ./install.sh
 ```
+
+`--with-additional` で入るのは、無くてもビルドできるが便利なものです。
+QEMU と OVMF は `frosted test` / `frosted test --uefi` の起動確認、
+`zsync` は `[binary] zsync` の差分ファイル、`apt-cacher-ng` は再ビルド時の
+パッケージ取得の高速化に使います。`--with-additional` だけでは必須の
+ビルド依存は入らないので、通常は `--with-deps` と一緒に指定してください。
 
 `--with-deps` を使わない場合は、先にこちらを実行してください。
 
@@ -90,7 +102,8 @@ arm64 では amd64/x86 用の GRUB パッケージの代わりに `grub-efi-arm6
 python3 bin/frosted --version
 ```
 
-アンインストールは `sudo ./install.sh --uninstall` です。
+アンインストールは `sudo ./install.sh --uninstall` です。apt で入れた
+パッケージは残るので、不要なら手で消してください。
 
 ## 5 分で試す
 

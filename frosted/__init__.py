@@ -4,7 +4,7 @@
 このツールが全部組み立てる、というのが基本の考え方。
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 #: プロジェクト名。README や ISO のメタデータに出す。
 PROJECT_NAME = "Frosted ISO Builder"

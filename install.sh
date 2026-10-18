@@ -1,13 +1,33 @@
 #!/bin/sh
 # Frosted ISO Builder を Debian マシンにインストールする。
 #
-#   ./install.sh              本体だけ入れる (依存は自分で入れる)
-#   ./install.sh --with-deps  ビルドに必要なパッケージも apt で入れる
-#   ./install.sh --uninstall  入れたものを消す
+#   ./install.sh                        本体だけ入れる (依存は自分で入れる)
+#   ./install.sh --with-deps            ビルドに必要なパッケージも apt で入れる
+#   ./install.sh --with-additional      任意ツール (QEMU/OVMF, zsync, apt-cacher-ng) も入れる
+#   ./install.sh --with-deps --with-additional
+#                                       必須と任意をまとめて入れる
+#   ./install.sh --uninstall            入れたものを消す (apt のパッケージは消さない)
 #
-# PREFIX を変えるとインストール先を変更できる (既定: /usr/local)。
+# --with-deps / --with-additional は root で実行してください。
+# PREFIX を変えるとインストール先を変更できます (既定: /usr/local)。
 
 set -eu
+
+usage() {
+    cat <<'USAGE_EOF'
+Frosted ISO Builder を Debian マシンにインストールする。
+
+  ./install.sh                         本体だけ入れる (依存は自分で入れる)
+  ./install.sh --with-deps             ビルドに必要なパッケージも apt で入れる
+  ./install.sh --with-additional       任意ツール (QEMU/OVMF, zsync, apt-cacher-ng) も入れる
+  ./install.sh --with-deps --with-additional
+                                       必須と任意をまとめて入れる
+  ./install.sh --uninstall             入れたものを消す (apt のパッケージは消さない)
+
+--with-deps / --with-additional は root で実行してください。
+PREFIX を変えるとインストール先を変更できます (既定: /usr/local)。
+USAGE_EOF
+}
 
 PREFIX="${PREFIX:-/usr/local}"
 LIBDIR="$PREFIX/lib/frosted"
@@ -33,19 +53,26 @@ esac
 DEPS="live-build debootstrap xorriso squashfs-tools cpio rsync uuid-runtime \
 mtools dosfstools $BOOTLOADER_PACKAGES fakeroot gnupg"
 
+# 無くてもビルドできるが、あると便利なもの。
+# doctor の「任意ツール」と、frosted test --uefi が使う OVMF に対応する。
+ADDITIONAL_PACKAGES="qemu-system-x86 ovmf zsync apt-cacher-ng"
+
 WITH_DEPS=0
+WITH_ADDITIONAL=0
 UNINSTALL=0
 
 for arg in "$@"; do
     case "$arg" in
         --with-deps) WITH_DEPS=1 ;;
+        --with-additional) WITH_ADDITIONAL=1 ;;
         --uninstall) UNINSTALL=1 ;;
         -h|--help)
-            sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'
+            usage
             exit 0
             ;;
         *)
             echo "知らないオプションです: $arg" >&2
+            echo "使い方は ./install.sh --help を見てください。" >&2
             exit 1
             ;;
     esac
@@ -66,16 +93,30 @@ if [ ! -f "$REPO_ROOT/frosted/cli.py" ]; then
     exit 1
 fi
 
-if [ "$WITH_DEPS" = "1" ]; then
+if [ "$WITH_DEPS" = "1" ] || [ "$WITH_ADDITIONAL" = "1" ]; then
     if [ "$(id -u)" != "0" ]; then
-        echo "エラー: --with-deps は root で実行してください (sudo ./install.sh --with-deps)" >&2
+        echo "エラー: --with-deps / --with-additional は root で実行してください" >&2
+        echo "       sudo ./install.sh --with-deps --with-additional" >&2
         exit 1
     fi
-    echo "必要なパッケージを入れます..."
+
+    PACKAGES=""
+    if [ "$WITH_DEPS" = "1" ]; then
+        PACKAGES="$DEPS"
+    fi
+    if [ "$WITH_ADDITIONAL" = "1" ]; then
+        if [ -n "$PACKAGES" ]; then
+            PACKAGES="$PACKAGES $ADDITIONAL_PACKAGES"
+        else
+            PACKAGES="$ADDITIONAL_PACKAGES"
+        fi
+    fi
+
+    echo "パッケージを入れます..."
     # shellcheck disable=SC2086
     apt-get update
     # shellcheck disable=SC2086
-    apt-get install -y $DEPS
+    apt-get install -y $PACKAGES
 fi
 
 if [ "$(id -u)" = "0" ]; then

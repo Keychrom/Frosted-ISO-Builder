@@ -70,9 +70,21 @@ cd Frosted-ISO-Builder
 # Install with its dependencies (recommended)
 sudo ./install.sh --with-deps
 
+# Also install the optional tools (QEMU/OVMF, zsync, apt-cacher-ng)
+sudo ./install.sh --with-deps --with-additional
+
+# Add just the optional tools later
+sudo ./install.sh --with-additional
+
 # Or install the tool only
 sudo ./install.sh
 ```
+
+`--with-additional` installs tools that are optional but useful. QEMU and
+OVMF are used by `frosted test` / `frosted test --uefi`, zsync produces the
+delta files for `[binary] zsync`, and apt-cacher-ng speeds up package
+downloads on rebuilds. It does not install the required build dependencies, so
+normally you should pass it together with `--with-deps`.
 
 If you skip `--with-deps`, install these first:
 
@@ -91,7 +103,8 @@ You can also run it without installing:
 python3 bin/frosted --version
 ```
 
-Uninstall with `sudo ./install.sh --uninstall`.
+Uninstall with `sudo ./install.sh --uninstall`. Packages installed through
+apt are left in place; remove them manually if you no longer need them.
 
 ## Try it in five minutes
 
