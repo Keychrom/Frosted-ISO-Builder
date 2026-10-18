@@ -271,7 +271,7 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | `mirror` | `http://deb.debian.org/debian/` | APT mirror. Point this at an internal mirror if you have one |
 | `security_mirror` | `http://security.debian.org/...` | Security updates mirror (ignored for `sid`/`unstable`) |
 | `archive_areas` | `main contrib non-free-firmware` | Archive areas to enable |
-| `compression` | `xz` | `xz`, `gzip`, `bzip2`, `lzip` or `none` |
+| `compression` | `xz` | Archive compression for tar/netboot/source (`xz`, `gzip`, `bzip2`, `lzip`, `none`) |
 | `apt_recommends` | `false` | Also install recommended packages |
 | `apt_proxy` | empty | e.g. `http://192.168.1.10:3142`. Makes rebuilds much faster |
 | `cache` | `true` | Keep the cache so rebuilds are fast |
@@ -287,6 +287,8 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | `proposed_updates` | unset | Enable proposed updates |
 | `security` | unset | Enable the security suite (ignored for `sid`/`unstable`) |
 | `source` | unset | Also build source images |
+| `debconf_frontend` | unset | `dialog`, `editor`, `noninteractive` or `readline` |
+| `debconf_priority` | unset | `low`, `medium`, `high` or `critical` |
 
 ```toml
 [build]
@@ -325,7 +327,7 @@ recommends and the HTTP proxy.
 | `distribution` | same as `iso.distribution` | Installer release |
 | `preseed` | empty | Host preseed file copied to `config/preseed/frosted.cfg` |
 
-The installer type must be compatible with `[build] binary_image`,
+The installer type must be compatible with `[binary] image_type`,
 bootloaders and the selected image layout. Try a small image first.
 
 ### `[kernel]` — kernel packages
@@ -334,6 +336,32 @@ bootloaders and the selected image layout. Try a small image first.
 | --- | --- | --- |
 | `packages` | empty | e.g. `linux-image` |
 | `flavours` | empty | e.g. `["amd64"]` or `["686-pae"]` |
+
+### `[binary]` — image layout and compression
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `image_type` | `iso-hybrid` | `iso`, `iso-hybrid`, `netboot`, `tar` or `hdd` |
+| `filesystem` | unset | `fat16`, `fat32`, `ext2`, `ext3`, `ext4` or `ntfs` |
+| `checksums` | `sha256` | `md5`, `sha1`, `sha224`, `sha256`, `sha384`, `sha512` or `none` |
+| `chroot_filesystem` | unset | `ext2`, `ext3`, `ext4`, `squashfs`, `jffs2` or `none` |
+| `squashfs_compression` | `xz` | `gzip`, `lzma`, `lzo`, `lz4`, `xz` or `zstd` |
+| `squashfs_compression_level` | unset | mksquashfs compression level |
+| `initramfs_compression` | unset | `bzip2`, `gzip` or `lzma` |
+| `zsync` | unset | Generate zsync metadata for delta downloads |
+| `win32_loader` | unset | Include the legacy win32-loader |
+
+```toml
+[binary]
+image_type = "iso-hybrid"
+squashfs_compression = "zstd"
+squashfs_compression_level = 19
+checksums = "sha256"
+```
+
+`[build] compression` controls archive compression for tar/netboot/source
+images; `[binary] squashfs_compression` controls the live filesystem inside
+an ISO.
 
 ## Command reference
 

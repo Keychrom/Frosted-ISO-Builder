@@ -56,6 +56,16 @@ OPTION_ALIASES: dict[str, tuple[str, ...]] = {
     "distribution": ("--distribution",),
     "architecture": ("--architecture", "--architectures"),
     "binary_image": ("--binary-image", "--binary-images"),
+    "binary_filesystem": ("--binary-filesystem",),
+    "checksums": ("--checksums",),
+    "chroot_filesystem": ("--chroot-filesystem",),
+    "squashfs_compression_type": ("--chroot-squashfs-compression-type",),
+    "squashfs_compression_level": ("--chroot-squashfs-compression-level",),
+    "initramfs_compression": ("--initramfs-compression",),
+    "zsync": ("--zsync",),
+    "win32_loader": ("--win32-loader",),
+    "debconf_frontend": ("--debconf-frontend",),
+    "debconf_priority": ("--debconf-priority",),
     "bootloaders": ("--bootloaders", "--bootloader"),
     "archive_areas": ("--archive-areas",),
     "mirror_bootstrap": ("--mirror-bootstrap",),
@@ -323,7 +333,28 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
 
     emit("distribution", recipe.iso.distribution)
     emit("architecture", recipe.iso.architecture)
-    emit("binary_image", "iso-hybrid")
+    emit("binary_image", recipe.binary.image_type)
+    if recipe.binary.filesystem:
+        emit("binary_filesystem", recipe.binary.filesystem)
+    emit("checksums", recipe.binary.checksums)
+    if recipe.binary.chroot_filesystem:
+        emit("chroot_filesystem", recipe.binary.chroot_filesystem)
+    if recipe.binary.chroot_filesystem != "none":
+        emit("squashfs_compression_type", recipe.binary.squashfs_compression)
+        if recipe.binary.squashfs_compression_level is not None:
+            emit(
+                "squashfs_compression_level",
+                str(recipe.binary.squashfs_compression_level),
+            )
+    if recipe.binary.initramfs_compression:
+        emit("initramfs_compression", recipe.binary.initramfs_compression)
+    if recipe.binary.zsync is not None:
+        emit("zsync", "true" if recipe.binary.zsync else "false")
+    if recipe.binary.win32_loader is not None:
+        emit(
+            "win32_loader",
+            "true" if recipe.binary.win32_loader else "false",
+        )
     emit("bootloaders", " ".join(loaders))
     emit("archive_areas", " ".join(recipe.build.archive_areas))
     emit("mirror_bootstrap", recipe.build.mirror)
@@ -380,6 +411,10 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
         emit("security", "true" if recipe.build.security else "false")
     if recipe.build.source is not None:
         emit("source", "true" if recipe.build.source else "false")
+    if recipe.build.debconf_frontend:
+        emit("debconf_frontend", recipe.build.debconf_frontend)
+    if recipe.build.debconf_priority:
+        emit("debconf_priority", recipe.build.debconf_priority)
     emit("cache", "true" if recipe.build.cache else "false")
     if recipe.build.cache:
         emit("cache_stages", "bootstrap chroot")

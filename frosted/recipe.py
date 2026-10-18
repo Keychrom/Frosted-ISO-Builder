@@ -43,6 +43,14 @@ KNOWN_INSTALLER_TYPES = (
     "businesscard",
     "live",
 )
+KNOWN_BINARY_IMAGES = ("iso", "iso-hybrid", "netboot", "tar", "hdd")
+KNOWN_BINARY_FILESYSTEMS = ("fat16", "fat32", "ext2", "ext3", "ext4", "ntfs")
+KNOWN_CHROOT_FILESYSTEMS = ("ext2", "ext3", "ext4", "squashfs", "jffs2", "none")
+KNOWN_CHECKSUMS = ("md5", "sha1", "sha224", "sha256", "sha384", "sha512", "none")
+KNOWN_SQUASHFS_COMPRESSION = ("gzip", "lzma", "lzo", "lz4", "xz", "zstd")
+KNOWN_INITRAMFS_COMPRESSION = ("bzip2", "gzip", "lzma")
+KNOWN_DEBCONF_FRONTENDS = ("dialog", "editor", "noninteractive", "readline")
+KNOWN_DEBCONF_PRIORITIES = ("low", "medium", "high", "critical")
 
 DEFAULT_MIRROR = "http://deb.debian.org/debian/"
 DEFAULT_SECURITY_MIRROR = "http://security.debian.org/debian-security/"
@@ -255,6 +263,20 @@ class BootSection:
 
 
 @dataclass
+class BinarySection:
+    image_type: str = "iso-hybrid"
+    #: hdd/netboot 用のファイルシステム。空なら live-build の既定値。
+    filesystem: str = ""
+    checksums: str = "sha256"
+    chroot_filesystem: str = ""
+    squashfs_compression: str = "xz"
+    squashfs_compression_level: int | None = None
+    initramfs_compression: str = ""
+    zsync: bool | None = None
+    win32_loader: bool | None = None
+
+
+@dataclass
 class AptSection:
     #: apt / apt-get / aptitude。空なら live-build の既定値。
     backend: str = ""
@@ -315,6 +337,8 @@ class BuildSection:
     proposed_updates: bool | None = None
     security: bool | None = None
     source: bool | None = None
+    debconf_frontend: str = ""
+    debconf_priority: str = ""
 
 
 # --------------------------------------------------------------------------
@@ -337,6 +361,7 @@ class Recipe:
     apt: AptSection = field(default_factory=AptSection)
     installer: InstallerSection = field(default_factory=InstallerSection)
     kernel: KernelSection = field(default_factory=KernelSection)
+    binary: BinarySection = field(default_factory=BinarySection)
 
     #: レシピファイルの場所。相対パスはここを基準に解決する。
     path: Path | None = None
@@ -421,6 +446,7 @@ class Recipe:
             "apt",
             "installer",
             "kernel",
+            "binary",
         }
         _reject_unknown(data, top_known, "", issues)
 
@@ -454,6 +480,7 @@ class Recipe:
             _table(data, "installer", issues), issues
         )
         recipe.kernel = _kernel_from(_table(data, "kernel", issues), issues)
+        recipe.binary = _binary_from(_table(data, "binary", issues), issues)
 
         _validate_cross(recipe, issues)
         errors = [issue for issue in issues if issue.is_error]
@@ -627,6 +654,31 @@ class Recipe:
         if kernel:
             data["kernel"] = kernel
 
+        binary = _clean(
+            {
+                "image_type": (
+                    "" if self.binary.image_type == "iso-hybrid"
+                    else self.binary.image_type
+                ),
+                "filesystem": self.binary.filesystem,
+                "checksums": (
+                    "" if self.binary.checksums == "sha256"
+                    else self.binary.checksums
+                ),
+                "chroot_filesystem": self.binary.chroot_filesystem,
+                "squashfs_compression": (
+                    "" if self.binary.squashfs_compression == "xz"
+                    else self.binary.squashfs_compression
+                ),
+                "squashfs_compression_level": self.binary.squashfs_compression_level,
+                "initramfs_compression": self.binary.initramfs_compression,
+                "zsync": self.binary.zsync,
+                "win32_loader": self.binary.win32_loader,
+            }
+        )
+        if binary:
+            data["binary"] = binary
+
         data["build"] = _clean(
             {
                 "workdir": self.build.workdir,
@@ -649,6 +701,8 @@ class Recipe:
                 "proposed_updates": self.build.proposed_updates,
                 "security": self.build.security,
                 "source": self.build.source,
+                "debconf_frontend": self.build.debconf_frontend,
+                "debconf_priority": self.build.debconf_priority,
             }
         )
 
@@ -1298,6 +1352,8 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         "proposed_updates",
         "security",
         "source",
+        "debconf_frontend",
+        "debconf_priority",
     }
     _reject_unknown(data, known, "build", issues)
     section = BuildSection(
@@ -1333,6 +1389,12 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         ),
         security=_optional_bool_value(data, "security", "build", issues),
         source=_optional_bool_value(data, "source", "build", issues),
+        debconf_frontend=_str_value(
+            data, "debconf_frontend", "", "build", issues
+        ),
+        debconf_priority=_str_value(
+            data, "debconf_priority", "", "build", issues
+        ),
     )
     if not section.workdir.strip() or "\n" in section.workdir or "\r" in section.workdir:
         issues.append(
@@ -1396,6 +1458,30 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
                 "build.secure_boot",
                 f"未対応の値です: {section.secure_boot!r}",
                 hint=f"対応: {', '.join(KNOWN_SECURE_BOOT)}",
+            )
+        )
+    if (
+        section.debconf_frontend
+        and section.debconf_frontend not in KNOWN_DEBCONF_FRONTENDS
+    ):
+        issues.append(
+            Issue(
+                "error",
+                "build.debconf_frontend",
+                f"未対応の debconf frontend です: {section.debconf_frontend!r}",
+                hint=f"対応: {', '.join(KNOWN_DEBCONF_FRONTENDS)}",
+            )
+        )
+    if (
+        section.debconf_priority
+        and section.debconf_priority not in KNOWN_DEBCONF_PRIORITIES
+    ):
+        issues.append(
+            Issue(
+                "error",
+                "build.debconf_priority",
+                f"未対応の debconf priority です: {section.debconf_priority!r}",
+                hint=f"対応: {', '.join(KNOWN_DEBCONF_PRIORITIES)}",
             )
         )
     if section.apt_proxy and not RE_MIRROR.match(section.apt_proxy):
@@ -1511,6 +1597,82 @@ def _kernel_from(data: dict[str, Any], issues: list[Issue]) -> KernelSection:
                     f"使えないフレーバー名です: {flavour!r}",
                 )
             )
+    return section
+
+
+def _binary_from(data: dict[str, Any], issues: list[Issue]) -> BinarySection:
+    known = {
+        "image_type",
+        "filesystem",
+        "checksums",
+        "chroot_filesystem",
+        "squashfs_compression",
+        "squashfs_compression_level",
+        "initramfs_compression",
+        "zsync",
+        "win32_loader",
+    }
+    _reject_unknown(data, known, "binary", issues)
+    section = BinarySection(
+        image_type=_str_value(data, "image_type", "iso-hybrid", "binary", issues),
+        filesystem=_str_value(data, "filesystem", "", "binary", issues),
+        checksums=_str_value(data, "checksums", "sha256", "binary", issues),
+        chroot_filesystem=_str_value(
+            data, "chroot_filesystem", "", "binary", issues
+        ),
+        squashfs_compression=_str_value(
+            data, "squashfs_compression", "xz", "binary", issues
+        ),
+        squashfs_compression_level=_optional_int_value(
+            data, "squashfs_compression_level", "binary", issues
+        ),
+        initramfs_compression=_str_value(
+            data, "initramfs_compression", "", "binary", issues
+        ),
+        zsync=_optional_bool_value(data, "zsync", "binary", issues),
+        win32_loader=_optional_bool_value(data, "win32_loader", "binary", issues),
+    )
+    checks = (
+        ("image_type", section.image_type, KNOWN_BINARY_IMAGES),
+        ("filesystem", section.filesystem, KNOWN_BINARY_FILESYSTEMS),
+        ("checksums", section.checksums, KNOWN_CHECKSUMS),
+        (
+            "chroot_filesystem",
+            section.chroot_filesystem,
+            KNOWN_CHROOT_FILESYSTEMS,
+        ),
+        (
+            "squashfs_compression",
+            section.squashfs_compression,
+            KNOWN_SQUASHFS_COMPRESSION,
+        ),
+        (
+            "initramfs_compression",
+            section.initramfs_compression,
+            KNOWN_INITRAMFS_COMPRESSION,
+        ),
+    )
+    for key, value, allowed in checks:
+        if value and value not in allowed:
+            issues.append(
+                Issue(
+                    "error",
+                    f"binary.{key}",
+                    f"未対応の値です: {value!r}",
+                    hint=f"対応: {', '.join(allowed)}",
+                )
+            )
+    if (
+        section.squashfs_compression_level is not None
+        and section.squashfs_compression_level < 1
+    ):
+        issues.append(
+            Issue(
+                "error",
+                "binary.squashfs_compression_level",
+                "1 以上で指定してください。",
+            )
+        )
     return section
 
 

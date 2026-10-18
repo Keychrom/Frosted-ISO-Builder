@@ -34,14 +34,14 @@ from .recipe import (
 #: キオスクの行き先を書き込むファイル (catalog と揃えてある)
 KIOSK_URL_FILE = "/etc/kiosk-url"
 
-#: ウィザードで選べる圧縮方式。live-build の --compression が受け付ける
-#: 値だけを並べる (zstd は squashfs 側のオプションで、--compression では
-#: 使えない)。レシピの検証 (KNOWN_COMPRESSION) と食い違わないよう、
-#: ここを増やすときは両方を揃えること。
-COMPRESSION_CHOICES: tuple[tuple[str, str], ...] = (
+#: ウィザードで選べる squashfs の圧縮方式。
+#: live-build の --chroot-squashfs-compression-type が受け付ける値。
+#: レシピの検証 (KNOWN_SQUASHFS_COMPRESSION) と揃えること。
+SQUASHFS_COMPRESSION_CHOICES: tuple[tuple[str, str], ...] = (
     ("xz", "圧縮率が高い。ビルドは遅い。既定。"),
+    ("zstd", "速くてそこそこ縮む。最近の傾向。"),
     ("gzip", "最速だが大きい。とにかく速く作りたいとき。"),
-    ("none", "圧縮しない。開発中の試行錯誤向け。"),
+    ("lz4", "非常に速いが大きい。試行錯誤向け。"),
 )
 
 
@@ -374,9 +374,9 @@ def _ask_advanced(recipe: Recipe) -> None:
         "APT ミラー",
         default=recipe.build.mirror or DEFAULT_MIRROR,
     )
-    recipe.build.compression = ui.ask_choice(
+    recipe.binary.squashfs_compression = ui.ask_choice(
         "squashfs の圧縮方式",
-        COMPRESSION_CHOICES,
+        SQUASHFS_COMPRESSION_CHOICES,
         default_index=0,
     )
     wallpaper = ui.ask(

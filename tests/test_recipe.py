@@ -224,6 +224,30 @@ class RecipeValidationTest(unittest.TestCase):
                 ),
             )
 
+    def test_bad_binary_image_type_is_rejected(self) -> None:
+        self.assertIn(
+            "binary.image_type",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "binary": {"image_type": "floppy"},
+                }
+            ),
+        )
+
+    def test_bad_debconf_frontend_is_rejected(self) -> None:
+        self.assertIn(
+            "build.debconf_frontend",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "build": {"debconf_frontend": "gui"},
+                }
+            ),
+        )
+
     def test_bad_kernel_flavour_is_rejected(self) -> None:
         self.assertIn(
             "kernel.flavours",
@@ -473,6 +497,34 @@ class TomlRoundTripTest(unittest.TestCase):
         self.assertEqual(loaded.installer.distribution, "trixie")
         self.assertEqual(loaded.kernel.packages, "linux-image")
         self.assertEqual(loaded.kernel.flavours, ["amd64"])
+
+    def test_binary_roundtrip(self) -> None:
+        original = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x"},
+                "binary": {
+                    "image_type": "hdd",
+                    "filesystem": "ext4",
+                    "checksums": "sha512",
+                    "chroot_filesystem": "squashfs",
+                    "squashfs_compression": "zstd",
+                    "squashfs_compression_level": 15,
+                    "initramfs_compression": "lzma",
+                    "zsync": True,
+                    "win32_loader": False,
+                },
+            }
+        )
+        loaded = self._roundtrip(original)
+        self.assertEqual(loaded.binary.image_type, "hdd")
+        self.assertEqual(loaded.binary.filesystem, "ext4")
+        self.assertEqual(loaded.binary.checksums, "sha512")
+        self.assertEqual(loaded.binary.squashfs_compression, "zstd")
+        self.assertEqual(loaded.binary.squashfs_compression_level, 15)
+        self.assertEqual(loaded.binary.initramfs_compression, "lzma")
+        self.assertTrue(loaded.binary.zsync)
+        self.assertFalse(loaded.binary.win32_loader)
 
     def test_wallpaper_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

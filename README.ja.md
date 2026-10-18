@@ -271,7 +271,7 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | `mirror` | `http://deb.debian.org/debian/` | APT ミラー。社内ミラーがあればここ |
 | `security_mirror` | `http://security.debian.org/...` | セキュリティ更新のミラー (`sid`/`unstable` では無視) |
 | `archive_areas` | `main contrib non-free-firmware` | 有効にするアーカイブ領域 |
-| `compression` | `xz` | `xz` / `gzip` / `bzip2` / `lzip` / `none` |
+| `compression` | `xz` | tar/netboot/source のアーカイブ圧縮 (`xz` / `gzip` / `bzip2` / `lzip` / `none`) |
 | `apt_recommends` | `false` | 推奨パッケージも入れるか |
 | `apt_proxy` | 空 | `http://192.168.1.10:3142` など。再ビルドが速くなる |
 | `cache` | `true` | キャッシュを残して再ビルドを速くするか |
@@ -287,6 +287,8 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | `proposed_updates` | 未指定 | proposed-updates を有効にする |
 | `security` | 未指定 | security スイートを有効にする (`sid`/`unstable` では無視) |
 | `source` | 未指定 | source イメージも作る |
+| `debconf_frontend` | 未指定 | `dialog` / `editor` / `noninteractive` / `readline` |
+| `debconf_priority` | 未指定 | `low` / `medium` / `high` / `critical` |
 
 ```toml
 [build]
@@ -325,7 +327,7 @@ apt が使えるよう `config/archives/` に置かれ、同じファイル名�
 | `distribution` | `iso.distribution` と同じ | インストーラーのリリース |
 | `preseed` | 空 | ホスト上の preseed。`config/preseed/frosted.cfg` にコピー |
 
-インストーラーの種別は `[build] binary_image`、ブートローダ、イメージ構成と
+インストーラーの種別は `[binary] image_type`、ブートローダ、イメージ構成と
 噛み合っている必要があります。まず小さい構成で試してください。
 
 ### `[kernel]` — カーネルパッケージ
@@ -334,6 +336,31 @@ apt が使えるよう `config/archives/` に置かれ、同じファイル名�
 | --- | --- | --- |
 | `packages` | 空 | 例: `linux-image` |
 | `flavours` | 空 | 例: `["amd64"]` / `["686-pae"]` |
+
+### `[binary]` — イメージ構成と圧縮
+
+| キー | 既定値 | 説明 |
+| --- | --- | --- |
+| `image_type` | `iso-hybrid` | `iso` / `iso-hybrid` / `netboot` / `tar` / `hdd` |
+| `filesystem` | 未指定 | `fat16` / `fat32` / `ext2` / `ext3` / `ext4` / `ntfs` |
+| `checksums` | `sha256` | `md5` / `sha1` / `sha224` / `sha256` / `sha384` / `sha512` / `none` |
+| `chroot_filesystem` | 未指定 | `ext2` / `ext3` / `ext4` / `squashfs` / `jffs2` / `none` |
+| `squashfs_compression` | `xz` | `gzip` / `lzma` / `lzo` / `lz4` / `xz` / `zstd` |
+| `squashfs_compression_level` | 未指定 | mksquashfs の圧縮レベル |
+| `initramfs_compression` | 未指定 | `bzip2` / `gzip` / `lzma` |
+| `zsync` | 未指定 | 差分ダウンロード用の zsync を作る |
+| `win32_loader` | 未指定 | 旧式の win32-loader を入れる |
+
+```toml
+[binary]
+image_type = "iso-hybrid"
+squashfs_compression = "zstd"
+squashfs_compression_level = 19
+checksums = "sha256"
+```
+
+`[build] compression` は tar/netboot/source のアーカイブ圧縮、
+`[binary] squashfs_compression` は ISO 内のライブファイルシステムの圧縮です。
 
 ## コマンド一覧
 

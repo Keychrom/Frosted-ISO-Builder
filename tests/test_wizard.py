@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from frosted import ui, wizard  # noqa: E402
 from frosted.catalog import PRESETS  # noqa: E402
-from frosted.recipe import KNOWN_COMPRESSION, Recipe  # noqa: E402
+from frosted.recipe import KNOWN_SQUASHFS_COMPRESSION, Recipe  # noqa: E402
 
 
 def _ask(queue):
@@ -253,9 +253,9 @@ class ValidatorTest(unittest.TestCase):
 
     def test_compression_choices_are_accepted_by_the_recipe(self) -> None:
         """ウィザードで選べる値は、レシピ検証でも通る値だけにすること。"""
-        for key, _description in wizard.COMPRESSION_CHOICES:
+        for key, _description in wizard.SQUASHFS_COMPRESSION_CHOICES:
             with self.subTest(compression=key):
-                self.assertIn(key, KNOWN_COMPRESSION)
+                self.assertIn(key, KNOWN_SQUASHFS_COMPRESSION)
 
 
 class HostDefaultsTest(unittest.TestCase):

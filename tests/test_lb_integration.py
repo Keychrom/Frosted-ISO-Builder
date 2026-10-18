@@ -270,6 +270,15 @@ def _fully_loaded_recipe() -> Recipe:
     recipe.installer.distribution = "trixie"
     recipe.kernel.packages = "linux-image"
     recipe.kernel.flavours = ["amd64"]
+    recipe.binary.filesystem = "fat32"
+    recipe.binary.chroot_filesystem = "squashfs"
+    recipe.binary.squashfs_compression = "zstd"
+    recipe.binary.squashfs_compression_level = 19
+    recipe.binary.initramfs_compression = "gzip"
+    recipe.binary.zsync = False
+    recipe.binary.win32_loader = False
+    recipe.build.debconf_frontend = "noninteractive"
+    recipe.build.debconf_priority = "critical"
     return recipe
 
 

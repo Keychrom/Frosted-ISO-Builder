@@ -872,6 +872,41 @@ class AdvancedSettingsTest(unittest.TestCase):
             with self.subTest(flag=flag):
                 self.assertEqual(argv[argv.index(flag) + 1], value)
 
+    def test_binary_options_reach_lb(self) -> None:
+        recipe = _basic_recipe()
+        recipe.binary.image_type = "iso"
+        recipe.binary.filesystem = "ext4"
+        recipe.binary.checksums = "sha512"
+        recipe.binary.chroot_filesystem = "squashfs"
+        recipe.binary.squashfs_compression = "zstd"
+        recipe.binary.squashfs_compression_level = 5
+        recipe.binary.initramfs_compression = "gzip"
+        recipe.binary.zsync = True
+        recipe.binary.win32_loader = True
+
+        argv, _ = build_lb_argv(recipe)
+        expected = {
+            "--binary-image": "iso",
+            "--binary-filesystem": "ext4",
+            "--checksums": "sha512",
+            "--chroot-filesystem": "squashfs",
+            "--chroot-squashfs-compression-type": "zstd",
+            "--chroot-squashfs-compression-level": "5",
+            "--initramfs-compression": "gzip",
+            "--zsync": "true",
+            "--win32-loader": "true",
+        }
+        for flag, value in expected.items():
+            with self.subTest(flag=flag):
+                self.assertEqual(argv[argv.index(flag) + 1], value)
+
+    def test_no_squashfs_skips_squashfs_options(self) -> None:
+        recipe = _basic_recipe()
+        recipe.binary.chroot_filesystem = "none"
+        argv, _ = build_lb_argv(recipe)
+        self.assertNotIn("--chroot-squashfs-compression-type", argv)
+        self.assertNotIn("--chroot-squashfs-compression-level", argv)
+
     def test_preseed_is_copied_for_the_installer(self) -> None:
         recipe = _basic_recipe()
         recipe.installer.type = "live"

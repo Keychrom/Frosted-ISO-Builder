@@ -541,6 +541,9 @@ EN: dict[str, str] = {
     "最速だが大きい。とにかく速く作りたいとき。": (
         "Fastest but largest. For when you just want it built quickly."
     ),
+    "非常に速いが大きい。試行錯誤向け。": (
+        "Very fast but large. Useful while experimenting."
+    ),
     "圧縮しない。開発中の試行錯誤向け。": (
         "No compression. For iterating during development."
     ),
@@ -599,6 +602,7 @@ EN: dict[str, str] = {
     ),
     "コロンと改行は使えません。": "Colons and newlines are not allowed.",
     "0 以上で指定してください。": "Specify 0 or greater.",
+    "1 以上で指定してください。": "Specify 1 or greater.",
     "開発版 (testing/sid) です。"
     "ビルドや起動が壊れることがあります。": (
         "This is a development release (testing/sid). "
@@ -864,6 +868,8 @@ PREFIXES: dict[str, str] = {
     "preseed ファイルが見つかりません": "Preseed file not found:",
     "未対応の APT バックエンドです": "Unsupported APT backend:",
     "未対応のインストーラー種別です": "Unsupported installer type:",
+    "未対応の debconf frontend です": "Unsupported debconf frontend:",
+    "未対応の debconf priority です": "Unsupported debconf priority:",
     "使えないリリース名です": "Invalid release name:",
     "使えないフレーバー名です": "Invalid kernel flavour:",
     "鍵のファイル名に使えない文字があります": (
