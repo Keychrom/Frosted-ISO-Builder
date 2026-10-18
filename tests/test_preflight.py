@@ -172,9 +172,12 @@ class ReportTest(unittest.TestCase):
         「必須ツールが見つかりません」で失敗にならないこと。
         """
         with tempfile.TemporaryDirectory() as tmp:
-            # /usr/sbin を模したディレクトリに必須ツールを全部置く
+            # /usr/sbin を模したディレクトリに必須ツールを全部置く。
+            # Linux の os.access(X_OK) は実行ビットが無いと False になる。
             for command, _description in preflight.MANDATORY_TOOLS:
-                (Path(tmp) / command).write_text("#!/bin/sh\n", encoding="utf-8")
+                target = Path(tmp) / command
+                target.write_text("#!/bin/sh\n", encoding="utf-8")
+                target.chmod(0o755)
 
             with mock.patch.object(runner.shutil, "which", return_value=None):
                 with mock.patch.object(runner, "FALLBACK_DIRS", (tmp,)):
