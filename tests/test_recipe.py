@@ -473,6 +473,41 @@ class TomlRoundTripTest(unittest.TestCase):
             )
         )
 
+    def test_rolling_distributions_are_accepted_with_a_warning(self) -> None:
+        for distribution in ("testing", "forky", "sid", "unstable"):
+            with self.subTest(distribution=distribution):
+                recipe = Recipe.from_dict(
+                    {
+                        "version": 1,
+                        "iso": {"name": "x", "distribution": distribution},
+                    }
+                )
+                self.assertTrue(recipe.iso.is_rolling())
+                self.assertTrue(
+                    any(
+                        issue.where == "iso.distribution"
+                        for issue in recipe.warnings
+                    )
+                )
+
+    def test_sid_ignores_the_security_mirror(self) -> None:
+        recipe = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x", "distribution": "sid"},
+                "build": {
+                    "security_mirror": "http://security.debian.org/debian-security/"
+                },
+            }
+        )
+        self.assertFalse(recipe.iso.has_security_archive())
+        self.assertTrue(
+            any(
+                issue.where == "build.security_mirror"
+                for issue in recipe.warnings
+            )
+        )
+
     def test_i386_does_not_warn_about_syslinux(self) -> None:
         recipe = Recipe.from_dict(
             {

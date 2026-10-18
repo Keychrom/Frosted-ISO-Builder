@@ -202,6 +202,16 @@ class LbConfigAcceptanceTest(unittest.TestCase):
                 apply_preset(recipe, preset)
                 self._check(recipe)
 
+    def test_rolling_distributions_are_accepted(self) -> None:
+        for distribution in ("testing", "sid"):
+            with self.subTest(distribution=distribution), tempfile.TemporaryDirectory() as tmp:
+                recipe = Recipe()
+                recipe.path = Path(tmp) / "recipe.toml"
+                recipe.build.workdir = "build"
+                recipe.iso.name = f"ci-{distribution}"
+                recipe.iso.distribution = distribution
+                self._check(recipe)
+
     def test_arm64_recipe_is_accepted(self) -> None:
         """アーキテクチャによってブートローダの選択が変わる部分の確認。"""
         with tempfile.TemporaryDirectory() as tmp:

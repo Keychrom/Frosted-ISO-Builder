@@ -251,6 +251,9 @@ EN: dict[str, str] = {
         "ISO name (skips that question)"
     ),
     "ベースにする Debian": "Debian release to base on",
+    "ベースにする Debian (testing/sid も選べます)": (
+        "Debian release to base on (testing/sid are also available)"
+    ),
     "アーキテクチャ": "Architecture",
     "既存のファイルを上書きする": "Overwrite an existing file",
     "最後の確認を飛ばす": "Skip the final confirmation",
@@ -468,6 +471,14 @@ EN: dict[str, str] = {
     "Debian 12。少し前の安定版。古いドライバが必要なとき。": (
         "Debian 12. The previous stable release. For older drivers."
     ),
+    "Debian Testing。次の安定版の開発版。新しいパッケージが使えるが、壊れることがある。": (
+        "Debian Testing. The development branch for the next stable release; "
+        "newer packages, but things can break."
+    ),
+    "Debian Sid (unstable)。最先端だが動作保証はない。security ミラーは使わない。": (
+        "Debian Sid (unstable). Bleeding edge with no guarantees; "
+        "no security mirror is used."
+    ),
     "64bit PC。通常はこれ。": "64-bit PC. Usually this one.",
     "32bit PC。よほど古いマシンでない限り不要。": (
         "32-bit PC. Unnecessary unless the machine is very old."
@@ -578,6 +589,22 @@ EN: dict[str, str] = {
         "spaces and / are not."
     ),
     "コロンと改行は使えません。": "Colons and newlines are not allowed.",
+    "開発版 (testing/sid) です。"
+    "ビルドや起動が壊れることがあります。": (
+        "This is a development release (testing/sid). "
+        "The build or boot may break."
+    ),
+    "安定版が必要なら trixie を使ってください。": (
+        "Use trixie if you need a stable release."
+    ),
+    "sid/unstable には security アーカイブがありません。"
+    "build.security_mirror は使用しません。": (
+        "sid/unstable has no security archive; "
+        "build.security_mirror will not be used."
+    ),
+    "security 更新は unstable 経由で入ります。": (
+        "Security updates arrive through unstable."
+    ),
     # ---- recipe.py: 旧フィールド名の移行 ---------------------------------
     "Keychrom は owner の旧名です。": "Keychrom is an old name for owner.",
     "owner に書き換えてください。": "Please rename it to owner.",
@@ -796,6 +823,7 @@ PREFIXES: dict[str, str] = {
     "ISO の名前は必須です。": "The ISO name is required.",
     "使えない名前です": "Invalid name:",
     "使えないバージョンです": "Invalid version:",
+    "対応": "Supported:",
     "この作業ディレクトリは削除できません": (
         "Refusing to delete this work directory:"
     ),

@@ -24,7 +24,7 @@ from .errors import BuildError, FrostedError, PreflightError, RecipeError, UserA
 from .i18n import t
 from . import i18n
 from .preflight import run as run_preflight
-from .recipe import Recipe, RecipeProblems
+from .recipe import KNOWN_DISTRIBUTIONS, Recipe, RecipeProblems
 from .runner import format_command, privileged, run_streaming, tail_file, which
 from . import wizard
 
@@ -86,7 +86,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_parser.add_argument("--name", help="ISO の名前 (指定するとその質問を飛ばします)")
     init_parser.add_argument(
-        "--distribution", choices=["bookworm", "trixie"], help="ベースにする Debian"
+        "--distribution",
+        choices=list(KNOWN_DISTRIBUTIONS),
+        help="ベースにする Debian (testing/sid も選べます)",
     )
     init_parser.add_argument(
         "--arch", choices=["amd64", "i386", "arm64"], help="アーキテクチャ"

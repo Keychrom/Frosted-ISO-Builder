@@ -133,7 +133,7 @@ sudo frosted build examples/minimal.toml
 | `name` | (必須) | ISO の名前。英小文字・数字・ハイフンのみ |
 | `version` | `"1.0"` | バージョン。出力ファイル名に入る |
 | `label` | 名前から生成 | ISO のボリュームラベル。32 文字以内 |
-| `distribution` | `trixie` | `trixie` (Debian 13) か `bookworm` (Debian 12) |
+| `distribution` | `trixie` | `trixie` (13) / `bookworm` (12) / `testing` / `sid` (`forky`・`unstable` も可) |
 | `architecture` | `amd64` | `amd64` / `i386` / `arm64` |
 | `output` | 自動生成 | 出力ファイル名。既定は `<名前>-<版>-<arch>.iso` |
 | `publisher` | ツール名 | ISO に書き込む発行元。**配布するなら必ず設定する** |
@@ -144,6 +144,11 @@ sudo frosted build examples/minimal.toml
 `isoinfo -d -i image.iso` などで確認できます。既定ではこのツール名が
 入ってしまうので、公開するイメージでは自分の名前かプロジェクト名に
 書き換えてください。
+
+`testing` は Debian Testing (現在は `forky`)、`sid` は unstable です。
+どちらも開発版で、パッケージが動き続けるため、昨日ビルドできた構成が
+今日壊れることがあります。`sid` には security アーカイブが無いので、
+`build.security_mirror` は無視されます。
 
 ### `[system]` — 地域と言語
 
@@ -253,7 +258,7 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | --- | --- | --- |
 | `workdir` | `"build"` | live-build を走らせるディレクトリ |
 | `mirror` | `http://deb.debian.org/debian/` | APT ミラー。社内ミラーがあればここ |
-| `security_mirror` | `http://security.debian.org/...` | セキュリティ更新のミラー |
+| `security_mirror` | `http://security.debian.org/...` | セキュリティ更新のミラー (`sid`/`unstable` では無視) |
 | `archive_areas` | `main contrib non-free-firmware` | 有効にするアーカイブ領域 |
 | `compression` | `xz` | `xz` / `gzip` / `bzip2` / `lzip` / `none` |
 | `apt_recommends` | `false` | 推奨パッケージも入れるか |

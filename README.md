@@ -134,7 +134,7 @@ you care about.
 | `name` | (required) | ISO name. Lowercase letters, digits and hyphens |
 | `version` | `"1.0"` | Version, used in the output file name |
 | `label` | derived from `name` | ISO volume label, up to 32 characters |
-| `distribution` | `trixie` | `trixie` (Debian 13) or `bookworm` (Debian 12) |
+| `distribution` | `trixie` | `trixie` (13), `bookworm` (12), `testing`, or `sid` (`forky`/`unstable` aliases also work) |
 | `architecture` | `amd64` | `amd64`, `i386` or `arm64` |
 | `output` | derived | Output file name. Defaults to `<name>-<version>-<arch>.iso` |
 | `publisher` | the tool's name | Publisher recorded in the ISO. **Set this if you distribute** |
@@ -144,6 +144,11 @@ you care about.
 `publisher` and `preparer` are written into the ISO and can be read back with
 `isoinfo -d -i image.iso`. They default to this tool's name, so change them to
 your own name or project before publishing an image.
+
+`testing` follows Debian Testing (currently `forky`), and `sid` is unstable.
+These are development branches: packages move and a build or boot that worked
+yesterday can break today. `sid` has no security archive, so
+`build.security_mirror` is ignored for it.
 
 ### `[system]` — locale and region
 
@@ -253,7 +258,7 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | --- | --- | --- |
 | `workdir` | `"build"` | Where live-build runs |
 | `mirror` | `http://deb.debian.org/debian/` | APT mirror. Point this at an internal mirror if you have one |
-| `security_mirror` | `http://security.debian.org/...` | Security updates mirror |
+| `security_mirror` | `http://security.debian.org/...` | Security updates mirror (ignored for `sid`/`unstable`) |
 | `archive_areas` | `main contrib non-free-firmware` | Archive areas to enable |
 | `compression` | `xz` | `xz`, `gzip`, `bzip2`, `lzip` or `none` |
 | `apt_recommends` | `false` | Also install recommended packages |

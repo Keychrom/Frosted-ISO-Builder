@@ -21,7 +21,14 @@ from .errors import RecipeError
 #: レシピフォーマットのバージョン。将来スキーマを変えたときの判別用。
 RECIPE_VERSION = 1
 
-KNOWN_DISTRIBUTIONS = ("bookworm", "trixie")
+#: 安定版。security アーカイブがある。
+STABLE_DISTRIBUTIONS = ("bookworm", "trixie")
+#: 開発版。testing は次の安定版、forky はその現在のコードネーム。
+#: sid/unstable は security アーカイブを持たない。
+ROLLING_DISTRIBUTIONS = ("testing", "forky", "sid", "unstable")
+#: security アーカイブが存在しないもの。
+UNSTABLE_DISTRIBUTIONS = ("sid", "unstable")
+KNOWN_DISTRIBUTIONS = STABLE_DISTRIBUTIONS + ROLLING_DISTRIBUTIONS
 KNOWN_ARCHITECTURES = ("amd64", "i386", "arm64")
 KNOWN_ARCHIVE_AREAS = ("main", "contrib", "non-free", "non-free-firmware")
 KNOWN_COMPRESSION = ("xz", "gzip", "bzip2", "lzip", "none")
@@ -100,6 +107,12 @@ class IsoSection:
     preparer: str = ""
     #: ISO アプリケーション識別子。未指定なら name を使う。
     application: str = ""
+
+    def is_rolling(self) -> bool:
+        return self.distribution in ROLLING_DISTRIBUTIONS
+
+    def has_security_archive(self) -> bool:
+        return self.distribution not in UNSTABLE_DISTRIBUTIONS
 
     def resolved_label(self) -> str:
         """ISO のボリュームラベル。未指定なら名前から作る。"""
@@ -717,7 +730,17 @@ def _iso_from(data: dict[str, Any], issues: list[Issue]) -> IsoSection:
                 "warning",
                 "iso.distribution",
                 f"動作確認していないリリースです: {section.distribution!r}",
-                hint=f"確認済み: {', '.join(KNOWN_DISTRIBUTIONS)}",
+                hint=f"対応: {', '.join(KNOWN_DISTRIBUTIONS)}",
+            )
+        )
+    elif section.is_rolling():
+        issues.append(
+            Issue(
+                "warning",
+                "iso.distribution",
+                "開発版 (testing/sid) です。"
+                "ビルドや起動が壊れることがあります。",
+                hint="安定版が必要なら trixie を使ってください。",
             )
         )
     if section.architecture not in KNOWN_ARCHITECTURES:
@@ -1305,6 +1328,21 @@ def _validate_cross(recipe: Recipe, issues: list[Issue]) -> None:
                     "パスワード認証を無効にし、鍵も設定していません。SSH でログインできません。",
                 )
             )
+
+    # sid/unstable には security アーカイブが無い
+    if (
+        not recipe.iso.has_security_archive()
+        and recipe.build.security_mirror
+    ):
+        issues.append(
+            Issue(
+                "warning",
+                "build.security_mirror",
+                "sid/unstable には security アーカイブがありません。"
+                "build.security_mirror は使用しません。",
+                hint="security 更新は unstable 経由で入ります。",
+            )
+        )
 
     # 永続化はパーティションの準備が要る
     if recipe.boot.persistence:

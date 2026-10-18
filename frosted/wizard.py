@@ -196,6 +196,14 @@ def run(
         [
             ("trixie", "Debian 13。現行の安定版。特におすすめ。"),
             ("bookworm", "Debian 12。少し前の安定版。古いドライバが必要なとき。"),
+            (
+                "testing",
+                "Debian Testing。次の安定版の開発版。新しいパッケージが使えるが、壊れることがある。",
+            ),
+            (
+                "sid",
+                "Debian Sid (unstable)。最先端だが動作保証はない。security ミラーは使わない。",
+            ),
         ],
         default_index=0,
     )

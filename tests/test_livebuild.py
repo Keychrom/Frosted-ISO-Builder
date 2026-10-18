@@ -746,6 +746,27 @@ class AutoConfigExecutionTest(unittest.TestCase):
             self.assertEqual(args[args.index("--iso-volume") + 1], "MYLINUX")
 
 
+class RollingDistributionTest(unittest.TestCase):
+    def test_testing_keeps_the_security_mirror(self) -> None:
+        recipe = _basic_recipe()
+        recipe.iso.distribution = "testing"
+        argv, _ = build_lb_argv(recipe)
+        self.assertIn("--mirror-chroot-security", argv)
+        self.assertIn("--mirror-binary-security", argv)
+
+    def test_sid_does_not_use_a_security_mirror(self) -> None:
+        for distribution in ("sid", "unstable"):
+            with self.subTest(distribution=distribution):
+                recipe = _basic_recipe()
+                recipe.iso.distribution = distribution
+                argv, _ = build_lb_argv(recipe)
+                self.assertNotIn("--mirror-chroot-security", argv)
+                self.assertNotIn("--mirror-binary-security", argv)
+                self.assertEqual(
+                    argv[argv.index("--distribution") + 1], distribution
+                )
+
+
 class BootloaderSelectionTest(unittest.TestCase):
     def test_arm64_drops_x86_bootloaders(self) -> None:
         recipe = _basic_recipe()

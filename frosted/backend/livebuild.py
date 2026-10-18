@@ -313,7 +313,7 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
     emit("mirror_bootstrap", recipe.build.mirror)
     emit("mirror_chroot", recipe.build.mirror)
     emit("mirror_binary", recipe.build.mirror)
-    if recipe.build.security_mirror:
+    if recipe.build.security_mirror and recipe.iso.has_security_archive():
         emit("mirror_chroot_security", recipe.build.security_mirror)
         emit("mirror_binary_security", recipe.build.security_mirror)
     emit("parent_distribution", recipe.iso.distribution)

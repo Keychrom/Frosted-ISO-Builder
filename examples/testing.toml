@@ -1,0 +1,35 @@
+# Debian Testing の最小 Live ISO。
+#
+# testing は次の安定版の開発版で、現在のコードネームは forky。
+# パッケージが動き続けるため、昨日ビルドできた構成が今日壊れることがある。
+#
+#   sudo frosted build examples/testing.toml
+#
+# Sid (unstable) を使うときは distribution を "sid" にする。
+# sid には security アーカイブが無いため、build.security_mirror は無視される。
+
+version = 1
+
+[iso]
+name = "testing-live"
+version = "1.0"
+distribution = "testing"
+architecture = "amd64"
+
+[system]
+hostname = "testing-live"
+locale = "C.UTF-8"
+timezone = "UTC"
+keyboard_layout = "us"
+
+[user]
+name = "user"
+autologin = true
+sudo = true
+
+[desktop]
+environment = "none"
+
+[build]
+compression = "xz"
+cache = true
