@@ -181,6 +181,17 @@ yesterday can break today. `sid` has no security archive, so
 | `environment` | `none` | [`none` / `xfce` / `lxqt` / `mate` / `gnome` / `kde` / `cinnamon`](#desktop-environments) |
 | `session_manager` | automatic | X session. Usually left alone |
 | `extra_packages` | empty | Extra packages for the desktop environment |
+| `wallpaper` | empty | Host image copied into the image and set at login |
+
+```toml
+[desktop]
+environment = "xfce"
+wallpaper = "./assets/wallpaper.jpg"
+```
+
+Wallpaper is applied at login on Xfce, GNOME, MATE, Cinnamon and LXQt.
+On KDE it is copied into the image but not set automatically. Supported
+formats are PNG, JPEG, WebP and SVG.
 
 ### `[packages]` — packages
 
@@ -270,6 +281,20 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | `memtest` | `false` | Add a memory test entry |
 | `debootstrap_options` | empty | Passed straight through to debootstrap |
 | `extra_repositories` | empty | Additional APT repositories (`deb ...` lines) |
+| `repository_keys` | empty | GPG keys for those repositories, installed for apt and copied to `/usr/share/keyrings/` |
+
+```toml
+[build]
+repository_keys = ["./assets/myrepo.gpg"]
+extra_repositories = [
+  "deb [signed-by=/usr/share/keyrings/myrepo.gpg] https://repo.example.com/debian stable main",
+]
+```
+
+Key files must be named with letters, digits, `.`, `_` or `-`, and end in
+`.gpg`, `.asc` or `.pgp`. They are placed in `config/archives/` so apt can use
+them while installing packages, and are also copied with the same file name
+into `/usr/share/keyrings/` in the image for `signed-by=` entries.
 
 ## Command reference
 

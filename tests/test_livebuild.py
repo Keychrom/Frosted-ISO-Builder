@@ -510,6 +510,69 @@ class IncludeMaterializationTest(unittest.TestCase):
             with self.assertRaises(BuildError):
                 project.generate()
 
+    def test_wallpaper_is_copied_and_autostart_is_generated(self) -> None:
+        recipe = _basic_recipe()
+        recipe.desktop.environment = "xfce"
+        with Project(recipe) as project:
+            (project.root / "wall.png").write_bytes(b"png")
+            recipe.desktop.wallpaper = "wall.png"
+            project.generate()
+
+            root = project.workdir() / "config" / "includes.chroot"
+            self.assertTrue(
+                (root / "usr/share/backgrounds/frosted/wallpaper.png").is_file()
+            )
+            script = root / "usr/local/bin/frosted-set-wallpaper"
+            autostart = root / "etc/xdg/autostart/20-frosted-wallpaper.desktop"
+            self.assertTrue(script.is_file())
+            self.assertTrue(autostart.is_file())
+            self.assertIn("xfconf-query", script.read_text(encoding="utf-8"))
+
+    def test_kde_wallpaper_is_copied_without_autostart(self) -> None:
+        recipe = _basic_recipe()
+        recipe.desktop.environment = "kde"
+        with Project(recipe) as project:
+            (project.root / "wall.png").write_bytes(b"png")
+            recipe.desktop.wallpaper = "wall.png"
+            project.generate()
+
+            root = project.workdir() / "config" / "includes.chroot"
+            self.assertTrue(
+                (root / "usr/share/backgrounds/frosted/wallpaper.png").is_file()
+            )
+            self.assertFalse(
+                (root / "etc/xdg/autostart/20-frosted-wallpaper.desktop").exists()
+            )
+
+    def test_repository_key_is_copied_to_keyrings(self) -> None:
+        recipe = _basic_recipe()
+        with Project(recipe) as project:
+            (project.root / "myrepo.gpg").write_bytes(b"key")
+            recipe.build.repository_keys = ["myrepo.gpg"]
+            project.generate()
+
+            target = (
+                project.workdir()
+                / "config"
+                / "includes.chroot_before_packages"
+                / "usr"
+                / "share"
+                / "keyrings"
+                / "myrepo.gpg"
+            )
+            self.assertTrue(target.is_file())
+            self.assertEqual(target.read_bytes(), b"key")
+
+            # パッケージ導入前に apt が読む場所にも置く
+            archive_key = (
+                project.workdir()
+                / "config"
+                / "archives"
+                / "myrepo.key.chroot"
+            )
+            self.assertTrue(archive_key.is_file())
+            self.assertEqual(archive_key.read_bytes(), b"key")
+
     def test_setup_scripts_are_materialized(self) -> None:
         recipe = _basic_recipe()
         with Project(recipe) as project:
@@ -612,6 +675,24 @@ class ShellSyntaxTest(unittest.TestCase):
             for hook in hooks:
                 with self.subTest(hook=hook.name):
                     self._check(hook.name, hook.read_text(encoding="utf-8"))
+
+    def test_wallpaper_script_syntax(self) -> None:
+        recipe = _basic_recipe()
+        recipe.desktop.environment = "xfce"
+        with Project(recipe) as project:
+            (project.root / "wall.png").write_bytes(b"png")
+            recipe.desktop.wallpaper = "wall.png"
+            project.generate()
+            script = (
+                project.workdir()
+                / "config"
+                / "includes.chroot"
+                / "usr"
+                / "local"
+                / "bin"
+                / "frosted-set-wallpaper"
+            )
+            self._check("wallpaper", script.read_text(encoding="utf-8"))
 
     def test_boot_setup_script_is_not_world_readable(self) -> None:
         """root のパスワードが入るスクリプトをライブユーザーに読ませない。"""

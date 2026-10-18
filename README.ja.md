@@ -181,6 +181,17 @@ sudo frosted build examples/minimal.toml
 | `environment` | `none` | [`none` / `xfce` / `lxqt` / `mate` / `gnome` / `kde` / `cinnamon`](#デスクトップ環境) |
 | `session_manager` | 自動 | X セッションの指定。通常は変更不要 |
 | `extra_packages` | 空 | デスクトップ環境に追加で入れるパッケージ |
+| `wallpaper` | 空 | イメージにコピーし、ログイン時に設定する壁紙画像 |
+
+```toml
+[desktop]
+environment = "xfce"
+wallpaper = "./assets/wallpaper.jpg"
+```
+
+壁紙は Xfce / GNOME / MATE / Cinnamon / LXQt でログイン時に設定されます。
+KDE ではイメージ内にコピーされるだけで、自動設定は行いません。
+対応形式は PNG / JPEG / WebP / SVG です。
 
 ### `[packages]` — パッケージ
 
@@ -270,6 +281,20 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | `memtest` | `false` | メモリテストのエントリを入れるか |
 | `debootstrap_options` | 空 | そのまま debootstrap に渡す |
 | `extra_repositories` | 空 | 追加の APT リポジトリ (`deb ...` の行) |
+| `repository_keys` | 空 | 追加リポジトリ用の GPG 鍵。apt に登録し、`/usr/share/keyrings/` にもコピーする |
+
+```toml
+[build]
+repository_keys = ["./assets/myrepo.gpg"]
+extra_repositories = [
+  "deb [signed-by=/usr/share/keyrings/myrepo.gpg] https://repo.example.com/debian stable main",
+]
+```
+
+鍵のファイル名は半角英数字・`.`・`_`・`-` のみで、拡張子は
+`.gpg` / `.asc` / `.pgp` のいずれかにしてください。パッケージ導入時に
+apt が使えるよう `config/archives/` に置かれ、同じファイル名でイメージ内の
+`/usr/share/keyrings/` にもコピーされます (`signed-by=` 用)。
 
 ## コマンド一覧
 

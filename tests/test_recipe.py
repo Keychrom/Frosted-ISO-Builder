@@ -157,6 +157,44 @@ class RecipeValidationTest(unittest.TestCase):
             ),
         )
 
+    def test_missing_wallpaper_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data = {
+                "version": 1,
+                "iso": {"name": "x"},
+                "desktop": {"wallpaper": str(Path(tmp) / "missing.png")},
+            }
+            self.assertIn("desktop.wallpaper", self._errors(data))
+
+    def test_wallpaper_without_desktop_warns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "wall.png"
+            image.write_bytes(b"png")
+            recipe = Recipe.from_dict(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "desktop": {"environment": "none", "wallpaper": str(image)},
+                }
+            )
+        self.assertTrue(
+            any(
+                issue.where == "desktop.wallpaper"
+                for issue in recipe.warnings
+            )
+        )
+
+    def test_missing_repository_key_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data = {
+                "version": 1,
+                "iso": {"name": "x"},
+                "build": {
+                    "repository_keys": [str(Path(tmp) / "missing.gpg")]
+                },
+            }
+            self.assertIn("build.repository_keys", self._errors(data))
+
     def test_package_name_validation(self) -> None:
         self.assertIn(
             "packages.include",
@@ -347,6 +385,37 @@ class TomlRoundTripTest(unittest.TestCase):
         )
         loaded = self._roundtrip(original)
         self.assertEqual(loaded.user.fullname, "")
+
+    def test_wallpaper_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "wall.png"
+            image.write_bytes(b"png")
+            original = Recipe.from_dict(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "desktop": {
+                        "environment": "xfce",
+                        "wallpaper": str(image),
+                    },
+                }
+            )
+            loaded = self._roundtrip(original)
+        self.assertEqual(loaded.desktop.wallpaper, str(image))
+
+    def test_repository_key_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            key = Path(tmp) / "myrepo.gpg"
+            key.write_bytes(b"key")
+            original = Recipe.from_dict(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "build": {"repository_keys": [str(key)]},
+                }
+            )
+            loaded = self._roundtrip(original)
+        self.assertEqual(loaded.build.repository_keys, [str(key)])
 
     def test_password_hash_roundtrip(self) -> None:
         """$ を含むハッシュもそのまま往復すること。"""

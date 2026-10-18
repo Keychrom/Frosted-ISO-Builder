@@ -26,6 +26,7 @@ from .recipe import (
     RE_LOCALE,
     RE_TIMEZONE,
     RE_USERNAME,
+    WALLPAPER_SUFFIXES,
     Recipe,
     WriteEntry,
 )
@@ -133,6 +134,15 @@ def _validate_hostname(text: str) -> str | None:
 def _validate_version(text: str) -> str | None:
     if not RE_ISO_VERSION.match(text):
         return "半角英数字と . _ + ~ - のみ。空白や / は使えません。"
+    return None
+
+
+def _validate_wallpaper(text: str) -> str | None:
+    path = Path(text).expanduser()
+    if not path.is_file():
+        return f"画像が見つかりません: {path}"
+    if path.suffix.lower() not in WALLPAPER_SUFFIXES:
+        return "使える形式: " + ", ".join(WALLPAPER_SUFFIXES)
     return None
 
 
@@ -369,6 +379,14 @@ def _ask_advanced(recipe: Recipe) -> None:
         COMPRESSION_CHOICES,
         default_index=0,
     )
+    wallpaper = ui.ask(
+        "壁紙の画像 (空なら変更しない)",
+        default=recipe.desktop.wallpaper or None,
+        validate=_validate_wallpaper,
+        allow_empty=True,
+    ).strip()
+    if wallpaper:
+        recipe.desktop.wallpaper = str(Path(wallpaper).expanduser().resolve())
     recipe.build.cache = ui.ask_bool(
         "ビルドキャッシュを残しますか? (2 回目以降が速くなります)", default=True
     )
@@ -431,6 +449,15 @@ def summarize(recipe: Recipe) -> list[tuple[str, str]]:
         (t("SSH"), t("有効") if recipe.ssh.enable_server else t("無効")),
         (t("作業ディレクトリ"), str(recipe.workdir())),
     ]
+    if recipe.desktop.wallpaper:
+        rows.append((t("壁紙"), recipe.desktop.wallpaper))
+    if recipe.build.repository_keys:
+        rows.append(
+            (
+                t("リポジトリの鍵"),
+                t("{count} 個", count=len(recipe.build.repository_keys)),
+            )
+        )
     if recipe.boot.persistence:
         rows.append((t("永続化"), t("有効")))
     return rows

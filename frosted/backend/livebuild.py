@@ -405,6 +405,16 @@ def generate(recipe: Recipe) -> GenerationResult:
             )
         )
 
+    # live-build は config/archives/*.key.chroot をパッケージ導入前に
+    # /etc/apt/trusted.gpg.d/ へ置く。ここに入れないと、extra_repositories の
+    # 鍵がまだ無い状態で apt update が走ってしまう。
+    for key_path in recipe.build.repository_keys:
+        source = recipe.resolve(key_path)
+        target = workdir / "config" / "archives" / f"{source.stem}.key.chroot"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        created.append(target)
+
     created.extend(_materialize_includes(recipe, workdir, result.warnings))
     created.append(
         _write_file(
@@ -656,6 +666,27 @@ def _materialize_includes(
         target = root / BOOT_LIB_DIR.lstrip("/") / "authorized_keys.d" / f"{index:02d}-{source.name}"
         created.append(_write_file(target, source.read_text(encoding="utf-8"), 0o644))
 
+    if recipe.desktop.wallpaper and recipe.desktop.environment != "none":
+        source = recipe.resolve(recipe.desktop.wallpaper)
+        image_path = _wallpaper_image_path(recipe)
+        target = root / image_path.lstrip("/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        created.append(target)
+        if recipe.desktop.environment != "kde":
+            created.extend(_write_wallpaper_files(recipe, root, image_path))
+
+    # signed-by= で参照される鍵は、パッケージ導入より前に chroot へ
+    # 入れておく必要がある。includes.chroot はパッケージ導入後なので、
+    # before_packages 側に置く。
+    key_root = workdir / "config" / "includes.chroot_before_packages"
+    for key_path in recipe.build.repository_keys:
+        source = recipe.resolve(key_path)
+        target = key_root / "usr" / "share" / "keyrings" / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        created.append(target)
+
     # セットアップ / 初回起動スクリプトの実体。
     # フックとランナーはここに置かれたものを名前で呼ぶだけにしている。
     for key, scripts, subdir, mode in (
@@ -670,6 +701,88 @@ def _materialize_includes(
                 _write_file(target, source.read_text(encoding="utf-8"), mode)
             )
 
+    return created
+
+
+def _wallpaper_image_path(recipe: Recipe) -> str:
+    suffix = recipe.resolve(recipe.desktop.wallpaper).suffix.lower()
+    return f"/usr/share/backgrounds/frosted/wallpaper{suffix}"
+
+
+def _wallpaper_script(recipe: Recipe, image_path: str) -> str:
+    return f"""#!/bin/sh
+# Set the desktop wallpaper configured in the recipe.
+WALLPAPER="{image_path}"
+[ -f "$WALLPAPER" ] || exit 0
+
+case "${{XDG_CURRENT_DESKTOP:-}}" in
+    *XFCE*)
+        command -v xfconf-query >/dev/null 2>&1 || exit 0
+        i=0
+        while [ "$i" -lt 30 ]; do
+            props=$(xfconf-query -c xfce4-desktop -l 2>/dev/null \\
+                | grep '/backdrop/.*/last-image$' || true)
+            if [ -n "$props" ]; then
+                for prop in $props; do
+                    xfconf-query -c xfce4-desktop -p "$prop" \\
+                        -s "$WALLPAPER" >/dev/null 2>&1 || true
+                done
+                exit 0
+            fi
+            i=$((i + 1))
+            sleep 1
+        done
+        ;;
+    *GNOME*)
+        command -v gsettings >/dev/null 2>&1 || exit 0
+        gsettings set org.gnome.desktop.background picture-uri \\
+            "file://$WALLPAPER" 2>/dev/null || true
+        gsettings set org.gnome.desktop.background picture-uri-dark \\
+            "file://$WALLPAPER" 2>/dev/null || true
+        ;;
+    *MATE*)
+        command -v gsettings >/dev/null 2>&1 || exit 0
+        gsettings set org.mate.background picture-filename \\
+            "$WALLPAPER" 2>/dev/null || true
+        ;;
+    *Cinnamon*|*X-Cinnamon*)
+        command -v gsettings >/dev/null 2>&1 || exit 0
+        gsettings set org.cinnamon.desktop.background picture-uri \\
+            "file://$WALLPAPER" 2>/dev/null || true
+        ;;
+    *LXQt*|*LXQT*)
+        command -v pcmanfm-qt >/dev/null 2>&1 || exit 0
+        pcmanfm-qt --set-wallpaper="$WALLPAPER" >/dev/null 2>&1 || true
+        ;;
+esac
+exit 0
+"""
+
+
+def _write_wallpaper_files(
+    recipe: Recipe, root: Path, image_path: str
+) -> list[Path]:
+    created: list[Path] = []
+    script = root / "usr" / "local" / "bin" / "frosted-set-wallpaper"
+    created.append(_write_file(script, _wallpaper_script(recipe, image_path), 0o755))
+
+    autostart = (
+        root / "etc" / "xdg" / "autostart" / "20-frosted-wallpaper.desktop"
+    )
+    created.append(
+        _write_file(
+            autostart,
+            "[Desktop Entry]\n"
+            "Type=Application\n"
+            "Name=Frosted Wallpaper\n"
+            "Comment=Set the wallpaper configured in the recipe\n"
+            "Exec=/usr/local/bin/frosted-set-wallpaper\n"
+            "Terminal=false\n"
+            "NoDisplay=true\n"
+            "X-GNOME-Autostart-enabled=true\n",
+            0o644,
+        )
+    )
     return created
 
 

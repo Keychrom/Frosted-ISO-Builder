@@ -55,6 +55,10 @@ RE_KEYBOARD = re.compile(r"^[a-z]{2}(,[a-z]{2})*$")
 RE_TIMEZONE = re.compile(r"^(UTC|[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z][A-Za-z0-9_+-]*)*)$")
 RE_MIRROR = re.compile(r"^(https?|ftp|file)://")
 RE_MODE = re.compile(r"^0?[0-7]{3,4}$")
+RE_KEYRING_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+#: 壁紙として受け付ける拡張子。デスクトップ側の画像ローダに任せる。
+WALLPAPER_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".svg")
 
 
 # --------------------------------------------------------------------------
@@ -180,6 +184,8 @@ class DesktopSection:
     session_manager: str = ""
     #: 追加で入れるパッケージ (デスクトップ環境のプリセットに足す)
     extra_packages: list[str] = field(default_factory=list)
+    #: ホスト上の壁紙画像。イメージ内にコピーしてログイン時に設定する。
+    wallpaper: str = ""
 
 
 @dataclass
@@ -260,6 +266,9 @@ class BuildSection:
     debootstrap_options: str = ""
     #: 追加の APT リポジトリ (例: 独自リポジトリや backports)
     extra_repositories: list[str] = field(default_factory=list)
+    #: extra_repositories で使う GPG 鍵 (ホスト上のパス)。
+    #: /usr/share/keyrings/<ファイル名> にコピーされる。
+    repository_keys: list[str] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------
@@ -458,6 +467,7 @@ class Recipe:
                 "environment": self.desktop.environment,
                 "session_manager": self.desktop.session_manager,
                 "extra_packages": list(self.desktop.extra_packages),
+                "wallpaper": self.desktop.wallpaper,
             }
         )
 
@@ -542,6 +552,7 @@ class Recipe:
                 "apt_proxy": self.build.apt_proxy,
                 "debootstrap_options": self.build.debootstrap_options,
                 "extra_repositories": list(self.build.extra_repositories),
+                "repository_keys": list(self.build.repository_keys),
             }
         )
 
@@ -917,12 +928,13 @@ def _user_from(data: dict[str, Any], issues: list[Issue]) -> UserSection:
 
 
 def _desktop_from(data: dict[str, Any], issues: list[Issue]) -> DesktopSection:
-    known = {"environment", "session_manager", "extra_packages"}
+    known = {"environment", "session_manager", "extra_packages", "wallpaper"}
     _reject_unknown(data, known, "desktop", issues)
     return DesktopSection(
         environment=_str_value(data, "environment", "none", "desktop", issues),
         session_manager=_str_value(data, "session_manager", "", "desktop", issues),
         extra_packages=_list_value(data, "extra_packages", "desktop", issues),
+        wallpaper=_str_value(data, "wallpaper", "", "desktop", issues),
     )
 
 
@@ -1154,6 +1166,7 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         "apt_proxy",
         "debootstrap_options",
         "extra_repositories",
+        "repository_keys",
     }
     _reject_unknown(data, known, "build", issues)
     section = BuildSection(
@@ -1178,6 +1191,9 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         ),
         extra_repositories=_list_value(
             data, "extra_repositories", "build", issues
+        ),
+        repository_keys=_list_value(
+            data, "repository_keys", "build", issues
         ),
     )
     if not section.workdir.strip() or "\n" in section.workdir or "\r" in section.workdir:
@@ -1395,6 +1411,98 @@ def _validate_cross(recipe: Recipe, issues: list[Issue]) -> None:
                     hint=f"探した場所: {candidate}",
                 )
             )
+
+    if recipe.desktop.wallpaper:
+        candidate = recipe.resolve(recipe.desktop.wallpaper)
+        if not candidate.is_file():
+            issues.append(
+                Issue(
+                    "error",
+                    "desktop.wallpaper",
+                    f"壁紙の画像が見つかりません: {recipe.desktop.wallpaper}",
+                    hint=f"探した場所: {candidate}",
+                )
+            )
+        elif candidate.suffix.lower() not in WALLPAPER_SUFFIXES:
+            issues.append(
+                Issue(
+                    "error",
+                    "desktop.wallpaper",
+                    f"壁紙に使えない形式です: {candidate.suffix}",
+                    hint="使える形式: " + ", ".join(WALLPAPER_SUFFIXES),
+                )
+            )
+        if recipe.desktop.environment == "none":
+            issues.append(
+                Issue(
+                    "warning",
+                    "desktop.wallpaper",
+                    "デスクトップ環境が none のため、壁紙は設定されません。",
+                )
+            )
+        elif recipe.desktop.environment == "kde":
+            issues.append(
+                Issue(
+                    "warning",
+                    "desktop.wallpaper",
+                    "KDE では壁紙の自動設定に対応していません。"
+                    "画像はイメージ内にコピーされます。",
+                    hint="KDE では手動で壁紙を設定してください。",
+                )
+            )
+
+    seen_key_names: set[str] = set()
+    seen_key_stems: set[str] = set()
+    for key_path in recipe.build.repository_keys:
+        candidate = recipe.resolve(key_path)
+        if not candidate.is_file():
+            issues.append(
+                Issue(
+                    "error",
+                    "build.repository_keys",
+                    f"リポジトリの鍵が見つかりません: {key_path}",
+                    hint=f"探した場所: {candidate}",
+                )
+            )
+            continue
+        if not RE_KEYRING_NAME.match(candidate.name):
+            issues.append(
+                Issue(
+                    "error",
+                    "build.repository_keys",
+                    f"鍵のファイル名に使えない文字があります: {candidate.name}",
+                    hint="半角英数字・._- のみにしてください。",
+                )
+            )
+        if candidate.suffix.lower() not in (".gpg", ".asc", ".pgp"):
+            issues.append(
+                Issue(
+                    "error",
+                    "build.repository_keys",
+                    f"鍵の形式が不明です: {candidate.name}",
+                    hint=".gpg / .asc / .pgp のいずれかにしてください。",
+                )
+            )
+        if candidate.name in seen_key_names:
+            issues.append(
+                Issue(
+                    "error",
+                    "build.repository_keys",
+                    f"同じ名前の鍵が複数あります: {candidate.name}",
+                    hint="イメージ内で /usr/share/keyrings/ に同じ名前で置かれるためです。",
+                )
+            )
+        if candidate.stem in seen_key_stems:
+            issues.append(
+                Issue(
+                    "error",
+                    "build.repository_keys",
+                    f"同じベース名の鍵が複数あります: {candidate.stem}",
+                    hint="拡張子を変えただけの同名ファイルは config/archives/ で衝突します。",
+                )
+            )
+        seen_key_names.add(candidate.name)
+        seen_key_stems.add(candidate.stem)
 
 
 # --------------------------------------------------------------------------

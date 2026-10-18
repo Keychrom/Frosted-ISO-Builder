@@ -359,6 +359,10 @@ EN: dict[str, str] = {
     "ファイル": "Files",
     "スクリプト": "Scripts",
     "  追加: {packages}": "  Add: {packages}",
+    "  追加: {line}": "  Add: {line}",
+    "  鍵: {path}": "  Key: {path}",
+    "  壁紙 {path}": "  Wallpaper {path}",
+    "リポジトリ": "Repositories",
     "  除外: {packages}": "  Remove: {packages}",
     "  コピー  {source} -> {target}": "  copy    {source} -> {target}",
     "  書き込み {path}": "  write   {path}",
@@ -525,6 +529,9 @@ EN: dict[str, str] = {
     ),
     "APT ミラー": "APT mirror",
     "squashfs の圧縮方式": "squashfs compression",
+    "壁紙の画像 (空なら変更しない)": (
+        "Wallpaper image (leave empty to keep the default)"
+    ),
     "圧縮率が高い。ビルドは遅い。既定。": (
         "Best compression. Slower to build. The default."
     ),
@@ -570,6 +577,8 @@ EN: dict[str, str] = {
     "キーボード": "Keyboard",
     "追加パッケージ": "Extra packages",
     "作業ディレクトリ": "Work directory",
+    "壁紙": "Wallpaper",
+    "リポジトリの鍵": "Repository keys",
     "永続化": "Persistence",
     # ---- wizard.py: 検証メッセージ --------------------------------------
     "半角小文字・数字・ハイフンのみ。先頭と末尾はハイフン以外。例: my-linux": (
@@ -604,6 +613,27 @@ EN: dict[str, str] = {
     ),
     "security 更新は unstable 経由で入ります。": (
         "Security updates arrive through unstable."
+    ),
+    "デスクトップ環境が none のため、壁紙は設定されません。": (
+        "The desktop environment is none, so the wallpaper is not applied."
+    ),
+    "KDE では壁紙の自動設定に対応していません。"
+    "画像はイメージ内にコピーされます。": (
+        "KDE wallpaper is not set automatically; "
+        "the image is copied into the image."
+    ),
+    "KDE では手動で壁紙を設定してください。": (
+        "Set the wallpaper manually in KDE."
+    ),
+    "半角英数字・._- のみにしてください。": (
+        "Use only ASCII letters, digits, ., _ and -."
+    ),
+    "イメージ内で /usr/share/keyrings/ に同じ名前で置かれるためです。": (
+        "They are copied into /usr/share/keyrings/ with the same name."
+    ),
+    "拡張子を変えただけの同名ファイルは config/archives/ で衝突します。": (
+        "Files with the same base name but a different extension collide "
+        "in config/archives/."
     ),
     # ---- recipe.py: 旧フィールド名の移行 ---------------------------------
     "Keychrom は owner の旧名です。": "Keychrom is an old name for owner.",
@@ -823,6 +853,19 @@ PREFIXES: dict[str, str] = {
     "ISO の名前は必須です。": "The ISO name is required.",
     "使えない名前です": "Invalid name:",
     "使えないバージョンです": "Invalid version:",
+    "壁紙の画像が見つかりません": "Wallpaper image not found:",
+    "画像が見つかりません": "Image not found:",
+    "壁紙に使えない形式です": "Unsupported wallpaper format:",
+    "リポジトリの鍵が見つかりません": "Repository key not found:",
+    "鍵のファイル名に使えない文字があります": (
+        "Invalid repository key file name:"
+    ),
+    "鍵の形式が不明です": "Unknown key file format:",
+    "同じ名前の鍵が複数あります": "Duplicate repository key file name:",
+    "同じベース名の鍵が複数あります": (
+        "Duplicate repository key base name:"
+    ),
+    "使える形式": "Supported formats:",
     "対応": "Supported:",
     "この作業ディレクトリは削除できません": (
         "Refusing to delete this work directory:"

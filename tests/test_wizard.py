@@ -14,6 +14,7 @@ import contextlib
 import io
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -236,6 +237,19 @@ class ValidatorTest(unittest.TestCase):
         self.assertIsNone(wizard._validate_version("2.0-beta1"))
         self.assertIsNotNone(wizard._validate_version("1/2"))
         self.assertIsNotNone(wizard._validate_version("1 2"))
+
+    def test_wallpaper_validator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            image = Path(tmp) / "wall.png"
+            image.write_bytes(b"png")
+            text_file = Path(tmp) / "wall.txt"
+            text_file.write_text("x", encoding="utf-8")
+
+            self.assertIsNone(wizard._validate_wallpaper(str(image)))
+            self.assertIsNotNone(wizard._validate_wallpaper(str(text_file)))
+            self.assertIsNotNone(
+                wizard._validate_wallpaper(str(Path(tmp) / "missing.png"))
+            )
 
     def test_compression_choices_are_accepted_by_the_recipe(self) -> None:
         """ウィザードで選べる値は、レシピ検証でも通る値だけにすること。"""

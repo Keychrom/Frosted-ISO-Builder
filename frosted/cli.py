@@ -656,6 +656,17 @@ def cmd_show(args) -> int:
         for entry in recipe.files.write:
             ui.out(t("  書き込み {path}", path=entry.path))
 
+    if recipe.desktop.wallpaper:
+        ui.step("デスクトップ")
+        ui.out(t("  壁紙 {path}", path=recipe.desktop.wallpaper))
+
+    if recipe.build.extra_repositories or recipe.build.repository_keys:
+        ui.step("リポジトリ")
+        for line in recipe.build.extra_repositories:
+            ui.out(t("  追加: {line}", line=line))
+        for key in recipe.build.repository_keys:
+            ui.out(t("  鍵: {path}", path=key))
+
     if recipe.scripts.setup or recipe.scripts.firstboot:
         ui.step("スクリプト")
         for script in recipe.scripts.setup:
