@@ -65,7 +65,20 @@ jobs:
         env:
           # lb の導入に失敗したのに緑になるのを防ぐ
           FROSTED_REQUIRE_LB: "1"
-        run: python3 -m unittest discover -s tests -t . -v
+        run: |
+          set +e
+          python3 -m unittest discover -s tests -t . -v > /tmp/frosted-tests.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            # ログ本文は管理者権限がないと取得できないので、失敗箇所を
+            # チェックランの注釈としても出す。
+            awk '/^FAIL:|^ERROR:/{show=1} show{print} show && NR>0{count++} count>=60{exit}' \
+              /tmp/frosted-tests.log | while IFS= read -r line; do
+                echo "::error::${line}"
+              done
+            tail -80 /tmp/frosted-tests.log
+          fi
+          exit "$status"
 
       - name: 例がすべて生成できること
         run: |
