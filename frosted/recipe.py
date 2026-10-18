@@ -36,6 +36,8 @@ RE_PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*(:[a-z0-9-]+)?$")
 RE_HOSTNAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 RE_USERNAME = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 RE_ISO_NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
+# バージョンは出力ファイル名に入るので、パス区切りや空白を含めない。
+RE_ISO_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+~-]*$")
 RE_ISO_LABEL = re.compile(r"^[A-Za-z0-9_.-]{1,32}$")
 # C.UTF-8 と POSIX は言語コードではないが実在するロケールなので許可する。
 # 末尾の @modifier (de_DE@euro など) も見る。
@@ -188,7 +190,7 @@ class CopyEntry:
     source: str = ""
     target: str = ""
     mode: str = ""
-    Keychrom: str = ""
+    owner: str = ""
 
 
 @dataclass
@@ -198,7 +200,7 @@ class WriteEntry:
     path: str = ""
     content: str = ""
     mode: str = "0644"
-    Keychrom: str = "root:root"
+    owner: str = "root:root"
 
 
 @dataclass
@@ -309,7 +311,9 @@ class Recipe:
             raise RecipeError(f"レシピファイルを読めません: {exc}") from exc
 
         try:
-            data = tomllib.loads(raw.decode("utf-8"))
+            # Windows のエディタが付ける UTF-8 BOM を許容する。
+            # tomllib は BOM をそのまま渡すと構文エラーになる。
+            data = tomllib.loads(raw.decode("utf-8-sig"))
         except UnicodeDecodeError as exc:
             raise RecipeError(
                 f"レシピファイルが UTF-8 ではありません: {recipe_path}",
@@ -404,7 +408,10 @@ class Recipe:
                 "application": self.iso.application,
                 "publisher": self.iso.publisher,
                 "preparer": self.iso.preparer,
-            }
+            },
+            # version は空にすると出力ファイル名から省かれる意味のある値。
+            # ここで落とすと再ロード時に既定の 1.0 に戻ってしまう。
+            keep=("name", "version"),
         )
 
         data["system"] = _clean(
@@ -428,7 +435,9 @@ class Recipe:
                 "default_groups": self.user.default_groups,
                 "autologin": self.user.autologin,
                 "sudo": self.user.sudo,
-            }
+            },
+            # fullname が空でも「表示名なし」という意味がある。
+            keep=("name", "fullname"),
         )
 
         data["desktop"] = _clean(
@@ -465,7 +474,7 @@ class Recipe:
                         "source": entry.source,
                         "target": entry.target,
                         "mode": entry.mode,
-                        "Keychrom": entry.Keychrom,
+                        "owner": entry.owner,
                     }
                 )
                 for entry in self.files.copy
@@ -477,8 +486,10 @@ class Recipe:
                         "path": entry.path,
                         "content": entry.content,
                         "mode": entry.mode,
-                        "Keychrom": entry.Keychrom,
-                    }
+                        "owner": entry.owner,
+                    },
+                    # 空の content は「空ファイルを作る」という意味なので残す。
+                    keep=("path", "content"),
                 )
                 for entry in self.files.write
             ]
@@ -689,6 +700,15 @@ def _iso_from(data: dict[str, Any], issues: list[Issue]) -> IsoSection:
                 "iso.name",
                 f"使えない名前です: {section.name!r}",
                 hint="半角小文字・数字・ハイフンのみ。先頭と末尾はハイフン以外。例: my-linux-1",
+            )
+        )
+    if section.version and not RE_ISO_VERSION.match(section.version):
+        issues.append(
+            Issue(
+                "error",
+                "iso.version",
+                f"使えないバージョンです: {section.version!r}",
+                hint="半角英数字と . _ + ~ - のみ。空白や / は使えません。",
             )
         )
     if section.distribution not in KNOWN_DISTRIBUTIONS:
@@ -922,6 +942,37 @@ def _ssh_from(data: dict[str, Any], issues: list[Issue]) -> SshSection:
     )
 
 
+def _owner_value(
+    item: dict[str, Any], default: str, where: str, issues: list[Issue]
+) -> str:
+    """所有者を読む。旧名の Keychrom も受け付ける。"""
+    owner = _str_value(item, "owner", default, where, issues)
+    if "Keychrom" not in item:
+        return owner
+
+    old = _str_value(item, "Keychrom", "", where, issues)
+    if "owner" in item:
+        issues.append(
+            Issue(
+                "error",
+                f"{where}.Keychrom",
+                "owner と Keychrom は同時に指定できません。",
+                hint="Keychrom は旧名です。owner だけを使ってください。",
+            )
+        )
+    else:
+        owner = old
+        issues.append(
+            Issue(
+                "warning",
+                f"{where}.Keychrom",
+                "Keychrom は owner の旧名です。",
+                hint="owner に書き換えてください。",
+            )
+        )
+    return owner
+
+
 def _files_from(data: dict[str, Any], issues: list[Issue]) -> FilesSection:
     _reject_unknown(data, {"copy", "write"}, "files", issues)
     section = FilesSection()
@@ -942,12 +993,14 @@ def _files_from(data: dict[str, Any], issues: list[Issue]) -> FilesSection:
             if not isinstance(item, dict):
                 issues.append(Issue("error", where, "テーブルにしてください。"))
                 continue
-            _reject_unknown(item, {"source", "target", "mode", "Keychrom"}, where, issues)
+            _reject_unknown(
+                item, {"source", "target", "mode", "owner", "Keychrom"}, where, issues
+            )
             entry = CopyEntry(
                 source=_str_value(item, "source", "", where, issues),
                 target=_str_value(item, "target", "", where, issues),
                 mode=_str_value(item, "mode", "", where, issues),
-                Keychrom=_str_value(item, "Keychrom", "", where, issues),
+                owner=_owner_value(item, "", where, issues),
             )
             if not entry.source:
                 issues.append(Issue("error", f"{where}.source", "コピー元は必須です。"))
@@ -991,12 +1044,14 @@ def _files_from(data: dict[str, Any], issues: list[Issue]) -> FilesSection:
             if not isinstance(item, dict):
                 issues.append(Issue("error", where, "テーブルにしてください。"))
                 continue
-            _reject_unknown(item, {"path", "content", "mode", "Keychrom"}, where, issues)
+            _reject_unknown(
+                item, {"path", "content", "mode", "owner", "Keychrom"}, where, issues
+            )
             entry = WriteEntry(
                 path=_str_value(item, "path", "", where, issues),
                 content=_str_value(item, "content", "", where, issues),
                 mode=_str_value(item, "mode", "0644", where, issues),
-                Keychrom=_str_value(item, "Keychrom", "root:root", where, issues),
+                owner=_owner_value(item, "root:root", where, issues),
             )
             if not entry.path:
                 issues.append(Issue("error", f"{where}.path", "パスは必須です。"))
@@ -1102,6 +1157,15 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
             data, "extra_repositories", "build", issues
         ),
     )
+    if not section.workdir.strip() or "\n" in section.workdir or "\r" in section.workdir:
+        issues.append(
+            Issue(
+                "error",
+                "build.workdir",
+                "作業ディレクトリが空か、改行を含んでいます。",
+                hint="レシピの下の build など、通常のディレクトリ名を指定してください。",
+            )
+        )
     if not RE_MIRROR.match(section.mirror):
         issues.append(
             Issue(
@@ -1187,15 +1251,20 @@ def _validate_cross(recipe: Recipe, issues: list[Issue]) -> None:
             )
         )
 
-    # ブートローダとアーキテクチャの整合
-    if recipe.iso.architecture != "amd64" and "syslinux" in recipe.build.bootloaders:
-        issues.append(
-            Issue(
-                "warning",
-                "build.bootloaders",
-                f"syslinux は {recipe.iso.architecture} では使えません。除外されます。",
+    # ブートローダとアーキテクチャの整合。syslinux は i386 でも使えるので、
+    # arm64 のときだけ x86 用ブートローダを除外する。
+    if recipe.iso.architecture == "arm64":
+        x86_loaders = {"syslinux", "grub-pc", "grub-legacy"}
+        if any(loader in x86_loaders for loader in recipe.build.bootloaders):
+            issues.append(
+                Issue(
+                    "warning",
+                    "build.bootloaders",
+                    "arm64 では x86 用のブートローダ "
+                    "(syslinux/grub-pc/grub-legacy) が使えません。除外されます。",
+                    hint="arm64 は grub-efi のみを使います。",
+                )
             )
-        )
 
     # ログイン手段が無くなる組み合わせを警告
     has_password = bool(recipe.user.password)
@@ -1364,15 +1433,18 @@ def _quote_key(key: str) -> str:
     return _toml_basic_string(key)
 
 
-def _clean(table: dict[str, Any]) -> dict[str, Any]:
+def _clean(
+    table: dict[str, Any], keep: tuple[str, ...] = ()
+) -> dict[str, Any]:
     """未設定の項目を落として、出力をすっきりさせる。
 
     落とすのは空文字と空配列だけ。`0` や `false` は意味のある値なので残す。
+    keep に書いたキーは、空でも意味があるので残す。
     """
     return {
         key: value
         for key, value in table.items()
-        if not (value == "" or value == [])
+        if key in keep or not (value == "" or value == [])
     }
 
 

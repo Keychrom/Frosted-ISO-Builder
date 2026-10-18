@@ -15,9 +15,23 @@ BINDIR="$PREFIX/bin"
 
 # ビルドに必要なパッケージ。live-build 自体が依存で引っ張るものも多いが、
 # BIOS/UEFI 両対応のためにブートローダ一式を明示しておく。
+# arm64 には grub-efi-amd64-bin が無いので、ホストのアーキテクチャに
+# 合わせて選ぶ。ここを固定すると arm64 で --with-deps が失敗する。
+HOST_ARCH="$(dpkg --print-architecture 2>/dev/null || uname -m)"
+case "$HOST_ARCH" in
+    arm64|aarch64)
+        BOOTLOADER_PACKAGES="grub-efi-arm64-bin"
+        ;;
+    i386|i686)
+        BOOTLOADER_PACKAGES="syslinux-common isolinux grub-efi-ia32-bin grub-pc-bin"
+        ;;
+    *)
+        BOOTLOADER_PACKAGES="syslinux-common isolinux grub-efi-amd64-bin grub-pc-bin"
+        ;;
+esac
+
 DEPS="live-build debootstrap xorriso squashfs-tools cpio rsync uuid-runtime \
-mtools dosfstools syslinux-common isolinux grub-efi-amd64-bin grub-pc-bin \
-fakeroot gnupg"
+mtools dosfstools $BOOTLOADER_PACKAGES fakeroot gnupg"
 
 WITH_DEPS=0
 UNINSTALL=0

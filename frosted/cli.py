@@ -324,6 +324,23 @@ def _find_built_iso(workdir: Path, image_name: str) -> Path | None:
     return max(pool, key=lambda path: path.stat().st_mtime)
 
 
+def _cleanup_is_safe(workdir: Path, base_dir: Path) -> bool:
+    """`clean --all` で消してよいディレクトリか。
+
+    build.workdir の打ち間違いでレシピのあるディレクトリやその親、
+    ホーム、ルートを丸ごと消す事故を防ぐ。
+    """
+    resolved = workdir.resolve()
+    if resolved.parent == resolved:  # /
+        return False
+    if resolved == Path.home().resolve():
+        return False
+    base = base_dir.resolve()
+    if resolved == base or resolved in base.parents:
+        return False
+    return True
+
+
 def _display_width(text: str) -> int:
     """端末での表示幅。全角は 2、半角は 1 として数える。
 
@@ -366,6 +383,17 @@ def cmd_init(args) -> int:
 
     target = Path(args.output).expanduser() if args.output else wizard.suggest_path(recipe)
     recipe.path = target
+
+    # ウィザードは Recipe を直接組み立てるので、保存前に通常の検証を通す。
+    # ここを飛ばすと、ウィザードが選べるはずのない値や存在しない鍵パスを
+    # そのまま保存し、次の `frosted build` で初めて失敗する。
+    recipe = Recipe.from_dict(recipe.to_dict(), path=target)
+    for issue in recipe.warnings:
+        ui.warn(f"{issue.where}: {t(issue.message)}")
+        if issue.hint:
+            ui.hint(t(issue.hint))
+    if recipe.warnings:
+        ui.out()
 
     if target.exists() and not args.force:
         if not ui.ask_bool(
@@ -678,6 +706,12 @@ def cmd_clean(args) -> int:
         return 0
 
     if args.all:
+        if not _cleanup_is_safe(workdir, recipe.base_dir):
+            raise BuildError(
+                f"この作業ディレクトリは削除できません: {workdir}",
+                hint="build.workdir がレシピのあるディレクトリやその親、"
+                "ホーム、ルートを指していないか確認してください。",
+            )
         if not ui.ask_bool(
             f"{workdir} を中身ごと削除します。よろしいですか?", default=False
         ):
@@ -745,6 +779,7 @@ def _enter_chroot(chroot_dir: Path) -> int:
         code = run_streaming(
             privileged(["mount", *options, source, str(target)]),
             echo=False,
+            quiet=True,
         )
         if code == 0:
             mounted.append(target)
@@ -755,7 +790,9 @@ def _enter_chroot(chroot_dir: Path) -> int:
     finally:
         # chroot から抜けたら必ず外す。外し忘れると次のビルドが汚い状態で走る。
         for target in reversed(mounted):
-            run_streaming(privileged(["umount", str(target)]), echo=False)
+            run_streaming(
+                privileged(["umount", str(target)]), echo=False, quiet=True
+            )
 
 
 def cmd_test(args) -> int:
@@ -770,6 +807,12 @@ def cmd_test(args) -> int:
         raise BuildError(
             f"ISO が見つかりません: {iso}",
             hint=f"先に `{APP_NAME} build {args.recipe}` を実行してください。",
+        )
+
+    if recipe.iso.architecture == "arm64":
+        raise BuildError(
+            "frosted test は今のところ amd64/i386 用です。",
+            hint="arm64 の ISO は実機か、qemu-system-aarch64 と AAVMF で起動してください。",
         )
 
     if which("qemu-system-x86_64") is None:
@@ -876,6 +919,7 @@ def cmd_verify(args) -> int:
     _kv("大きさ", _human_size(iso.stat().st_size))
 
     failed = False
+    verified = False
 
     # --- チェックサム ---
     sums_path = (
@@ -886,11 +930,17 @@ def cmd_verify(args) -> int:
     if sums_path.is_file():
         expected = _expected_digest(sums_path, iso.name)
         if expected is None:
-            ui.warn(t("チェックサムファイルを読めませんでした: {name}", name=sums_path.name))
+            ui.warn(
+                t(
+                    "チェックサムファイルにこの ISO の行がありません: {name}",
+                    name=sums_path.name,
+                )
+            )
         else:
             actual = release.sha256_file(iso)
             if actual == expected:
                 ui.ok(f"チェックサムが一致しました ({actual})")
+                verified = True
             else:
                 ui.err("チェックサムが一致しません。ファイルが壊れているか改ざんされています。")
                 ui.hint(f"  期待値 {expected}")
@@ -912,10 +962,13 @@ def cmd_verify(args) -> int:
             ui.hint("sudo apt install gnupg で入れてください。")
         else:
             code = run_streaming(
-                ["gpg", "--verify", str(signature), str(iso)], echo=False
+                ["gpg", "--verify", str(signature), str(iso)],
+                echo=args.verbose,
+                quiet=not args.verbose,
             )
             if code == 0:
                 ui.ok("署名を検証できました。")
+                verified = True
             else:
                 ui.err("署名の検証に失敗しました。")
                 ui.hint("配布元の公開鍵をインポートしてあるか確認してください。")
@@ -932,10 +985,14 @@ def cmd_verify(args) -> int:
             info = json.loads(info_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             info = {}
-        if info:
+        # build-info.json は配布物と一緒に運ばれる外部データなので、
+        # 中身が期待した辞書でなくても落ちないようにする。
+        if isinstance(info, dict) and info:
             ui.out()
             ui.out("  ビルド情報:")
-            iso_info = info.get("iso", {})
+            iso_info = info.get("iso")
+            if not isinstance(iso_info, dict):
+                iso_info = {}
             for label, key in (
                 ("作成元", "publisher"),
                 ("識別子", "application"),
@@ -948,14 +1005,17 @@ def cmd_verify(args) -> int:
                 if value:
                     ui.out(f"    {label.ljust(14)} {value}")
             count = info.get("installed_package_count")
-            if count:
+            if isinstance(count, int) and count:
                 ui.out(f"    {'パッケージ数'.ljust(14)} {count}")
 
     ui.out()
     if failed:
         ui.err("検証に失敗しました。")
         return 1
-    if not sums_path.is_file() and not signature.is_file():
+    if not verified:
+        # ファイルが存在するだけでは成功ではない。該当行の無いチェックサム
+        # ファイルや、gpg が無くて確認できなかった署名だけの状態で
+        # 「検証できました」と言ってはいけない。
         ui.warn("検証できるものがありませんでした。")
         return 1
     ui.ok("検証できました。")
@@ -1138,6 +1198,12 @@ def main(argv: list[str] | None = None) -> int:
         ui.err(error.message)
         if error.hint:
             ui.hint(error.hint)
+        return 1
+    except OSError as error:
+        # 書き込み権限が無い、ディスクが一杯など。トレースバックを出すより
+        # 「どこで失敗したか」を 1 行で伝えたほうが利用者は助かる。
+        ui.out()
+        ui.err(t("ファイル操作に失敗しました: {error}", error=error))
         return 1
     except KeyboardInterrupt:
         ui.out()

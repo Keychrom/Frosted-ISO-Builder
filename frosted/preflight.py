@@ -20,6 +20,10 @@ from pathlib import Path
 from .recipe import Recipe
 from .runner import is_root, run_capture, which
 
+#: テストから差し替えられるように定数にしておく。os.name を直接書き換えると
+#: pathlib の Path 実装まで切り替わり、Windows 上のテストが壊れる。
+_IS_WINDOWS = os.name == "nt"
+
 #: これが無いと live-build はまず動かない。欠けていればエラー扱い。
 MANDATORY_TOOLS: tuple[tuple[str, str], ...] = (
     ("lb", "live-build"),
@@ -89,6 +93,7 @@ def run(
         report.checks.append(_check_root())
     report.checks.extend(_check_tools())
     report.checks.append(_check_architecture(recipe))
+    report.checks.append(_check_workdir(recipe))
     report.checks.append(_check_disk(recipe))
     report.checks.append(_check_lb_options(recipe))
     if check_network:
@@ -237,6 +242,37 @@ def _check_architecture(recipe: Recipe) -> Check:
     )
 
 
+def _check_workdir(recipe: Recipe) -> Check:
+    """live-build が扱えない作業ディレクトリになっていないか。"""
+    if _IS_WINDOWS:
+        return Check(
+            "作業ディレクトリ",
+            "skip",
+            "Windows ではビルドしないため確認しません",
+        )
+
+    workdir = recipe.workdir()
+    resolved = workdir.resolve()
+    if resolved.parent == resolved:
+        return Check(
+            "作業ディレクトリ",
+            "fail",
+            f"ルートディレクトリを指しています: {resolved}",
+            hint="build.workdir を build など、レシピの下のディレクトリに変更してください。",
+        )
+
+    path = str(workdir)
+    if " " in path:
+        return Check(
+            "作業ディレクトリ",
+            "fail",
+            f"空白を含みます: {path}",
+            hint="live-build は空白を含むパスではビルドできません。"
+            " build.workdir を空白の無い場所に変更してください。",
+        )
+    return Check("作業ディレクトリ", "ok", path)
+
+
 def _existing_ancestor(path: Path) -> Path:
     current = path
     while not current.exists() and current != current.parent:
@@ -279,7 +315,11 @@ def _check_lb_options(recipe: Recipe) -> Check:
     実行前に突き合わせておく。ここで見つかれば、ビルドを走らせてから
     「オプションが不正」で落ちるのを避けられる。
     """
-    from .backend.livebuild import build_lb_args, probe_option_spellings
+    from .backend.livebuild import (
+        OPTION_ALIASES,
+        build_lb_args,
+        probe_option_spellings,
+    )
 
     if which("lb") is None:
         return Check("lb オプション", "skip", "lb が見つからないため確認できません")
@@ -293,14 +333,19 @@ def _check_lb_options(recipe: Recipe) -> Check:
             hint="既定の綴りで生成します。ビルドが通れば問題ありません。",
         )
 
-    args, warnings = build_lb_args(recipe)
+    args, _warnings = build_lb_args(recipe)
     flags = [arg for arg in args if arg.startswith("--")]
-    if warnings:
+    # build_lb_args の警告には、arm64 のブートローダ読み替えのように
+    # 「設定は反映されるが値を調整した」ものも含まれる。ここで見たいのは
+    # オプション自体が存在しない場合だけなので、missing を見る。
+    missing = sorted(set(spellings.missing))
+    if missing:
+        names = [OPTION_ALIASES[key][0] for key in missing if key in OPTION_ALIASES]
         return Check(
             "lb オプション",
             "warn",
             "一部の設定が反映されません",
-            hint=" / ".join(dict.fromkeys(warnings)),
+            hint=" / ".join(names or missing),
         )
     return Check("lb オプション", "ok", f"{len(flags)} 個すべて対応しています")
 

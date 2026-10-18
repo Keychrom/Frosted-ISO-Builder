@@ -15,12 +15,14 @@ from pathlib import Path
 from . import ui
 from .catalog import DESKTOPS, LANGUAGE_PACKS, PRESETS, apply_preset
 from .errors import UserAbort
-from .i18n import t
+from .i18n import get_language, t
 from .recipe import (
     DEFAULT_MIRROR,
     KNOWN_ARCHITECTURES,
     KNOWN_COMPRESSION,
+    RE_HOSTNAME,
     RE_ISO_NAME,
+    RE_ISO_VERSION,
     RE_LOCALE,
     RE_TIMEZONE,
     RE_USERNAME,
@@ -31,10 +33,25 @@ from .recipe import (
 #: キオスクの行き先を書き込むファイル (catalog と揃えてある)
 KIOSK_URL_FILE = "/etc/kiosk-url"
 
+#: ウィザードで選べる圧縮方式。live-build の --compression が受け付ける
+#: 値だけを並べる (zstd は squashfs 側のオプションで、--compression では
+#: 使えない)。レシピの検証 (KNOWN_COMPRESSION) と食い違わないよう、
+#: ここを増やすときは両方を揃えること。
+COMPRESSION_CHOICES: tuple[tuple[str, str], ...] = (
+    ("xz", "圧縮率が高い。ビルドは遅い。既定。"),
+    ("gzip", "最速だが大きい。とにかく速く作りたいとき。"),
+    ("none", "圧縮しない。開発中の試行錯誤向け。"),
+)
+
 
 # --------------------------------------------------------------------------
 # ホストの設定から既定値を拾う
 # --------------------------------------------------------------------------
+
+
+def _japanese_ui() -> bool:
+    """UI が日本語かどうか。ホスト情報が無いときの既定値を選ぶのに使う。"""
+    return get_language() == "ja"
 
 
 def _host_timezone() -> str:
@@ -46,27 +63,31 @@ def _host_timezone() -> str:
                     return value
         except OSError:
             continue
-    return "Asia/Tokyo"
+    return "Asia/Tokyo" if _japanese_ui() else "UTC"
 
 
 def _host_keyboard() -> str:
+    fallback = "jp" if _japanese_ui() else "us"
     try:
         text = Path("/etc/default/keyboard").read_text(encoding="utf-8")
     except OSError:
-        return "jp"
+        return fallback
     for line in text.splitlines():
         if line.startswith("XKBLAYOUT="):
             value = line.split("=", 1)[1].strip().strip('"')
             if value:
                 return value
-    return "jp"
+    return fallback
 
 
 def _host_locale() -> str:
     raw = os.environ.get("LANG") or os.environ.get("LC_ALL") or ""
     raw = raw.split(".")[0] if raw else ""
     if not raw or raw in ("C", "POSIX"):
-        return "ja_JP.UTF-8"
+        # ホストが C/POSIX なら、UI の言語に合わせて無難な既定値を選ぶ。
+        # ここで常に ja_JP にすると、英語 UI の利用者に日本語ロケールを
+        # 勧めてしまう。
+        return "ja_JP.UTF-8" if _japanese_ui() else "C.UTF-8"
     # LANG の値に encoding が付いていなければ UTF-8 を補う
     lang = os.environ.get("LANG", "")
     if "." in lang:
@@ -100,6 +121,18 @@ def _validate_username(text: str) -> str | None:
         return "半角小文字で始まり、小文字・数字・_・- のみ (32 文字以内)。"
     if text == "root":
         return "root は使えません。"
+    return None
+
+
+def _validate_hostname(text: str) -> str | None:
+    if not RE_HOSTNAME.match(text):
+        return "半角小文字・数字・ハイフンのみ、63 文字以内。例: mylinux"
+    return None
+
+
+def _validate_version(text: str) -> str | None:
+    if not RE_ISO_VERSION.match(text):
+        return "半角英数字と . _ + ~ - のみ。空白や / は使えません。"
     return None
 
 
@@ -150,7 +183,11 @@ def run(
     recipe.iso.name = name or ui.ask(
         "名前 (英小文字・ハイフン)", default="mylinux", validate=_validate_iso_name
     )
-    recipe.iso.version = ui.ask("バージョン (ファイル名に入ります)", default="1.0")
+    recipe.iso.version = ui.ask(
+        "バージョン (ファイル名に入ります)",
+        default="1.0",
+        validate=_validate_version,
+    )
 
     # --- 2. ベース -------------------------------------------------------
     ui.step("2/8  ベースにする Debian")
@@ -262,7 +299,7 @@ def run(
     # --- 7. 地域と言語の設定 ---------------------------------------------
     ui.step("7/8  地域の設定")
     recipe.system.hostname = ui.ask(
-        "ホスト名", default=recipe.iso.name
+        "ホスト名", default=recipe.iso.name, validate=_validate_hostname
     )
     recipe.system.locale = ui.ask(
         "ロケール", default=_host_locale(), validate=_validate_locale
@@ -321,12 +358,7 @@ def _ask_advanced(recipe: Recipe) -> None:
     )
     recipe.build.compression = ui.ask_choice(
         "squashfs の圧縮方式",
-        [
-            ("xz", "圧縮率が高い。ビルドは遅い。既定。"),
-            ("zstd", "速くてそこそこ縮む。最近の傾向。"),
-            ("gzip", "最速だが大きい。とにかく速く作りたいとき。"),
-            ("none", "圧縮しない。開発中の試行錯誤向け。"),
-        ],
+        COMPRESSION_CHOICES,
         default_index=0,
     )
     recipe.build.cache = ui.ask_bool(
@@ -354,7 +386,7 @@ def _ask_kiosk_url(recipe: Recipe) -> None:
                 path=KIOSK_URL_FILE,
                 content=url.rstrip("\n") + "\n",
                 mode="0644",
-                Keychrom="root:root",
+                owner="root:root",
             )
         )
     ui.ok(f"起動時に {url} を全画面で開きます。")

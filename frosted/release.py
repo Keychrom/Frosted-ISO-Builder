@@ -62,6 +62,57 @@ class ReleaseArtifacts:
 # --------------------------------------------------------------------------
 
 
+def _checksum_line_targets(line: str, name: str) -> bool:
+    """SHA256SUMS の 1 行が name を指しているか。
+
+    `sha256sum -b` の `*name` や、空白が 1 つだけの行も同じ ISO として
+    扱う。ここを文字列の終わりだけで判定すると、再ビルドのたびに
+    同じ ISO の行が増えてしまう。
+    """
+    parts = line.split()
+    return len(parts) >= 2 and parts[-1].lstrip("*") == name
+
+
+def _remove_checksum_lines(combined: Path, name: str) -> None:
+    """SHA256SUMS から name の行を取り除く。他の ISO の行は残す。"""
+    if not combined.is_file():
+        return
+    try:
+        existing = combined.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    lines = [
+        line
+        for line in existing.splitlines()
+        if line.strip() and not _checksum_line_targets(line, name)
+    ]
+    if lines:
+        combined.write_text(
+            "\n".join(lines) + "\n", encoding="utf-8", newline="\n"
+        )
+    else:
+        try:
+            combined.unlink()
+        except OSError:
+            pass
+
+
+def _remove_stale_artifacts(iso_path: Path) -> None:
+    """前回の成果物を消す。
+
+    --no-checksum や署名失敗のときに古い .sha256 / .asc が残ると、
+    新しい ISO の隣に前回の成果物が並び、配布物として誤解を招く。
+    """
+    for suffix in (".sha256", ".build-info.json", ".asc"):
+        try:
+            iso_path.with_name(f"{iso_path.name}{suffix}").unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+    _remove_checksum_lines(iso_path.with_name("SHA256SUMS"), iso_path.name)
+
+
 def write_checksums(iso_path: Path, digest: str) -> list[Path]:
     """ISO の隣にチェックサムを書く。
 
@@ -78,7 +129,9 @@ def write_checksums(iso_path: Path, digest: str) -> list[Path]:
         # 既に他の ISO の行があれば、その ISO の行だけ差し替える
         existing = combined.read_text(encoding="utf-8", errors="replace")
         lines = [
-            old for old in existing.splitlines() if not old.endswith(f"  {name}")
+            old
+            for old in existing.splitlines()
+            if not _checksum_line_targets(old, name)
         ]
         lines.append(line.rstrip("\n"))
         combined.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
@@ -227,7 +280,8 @@ def sign_iso(iso_path: Path, key_id: str, echo: bool = False) -> Path:
         str(signature),
         str(iso_path),
     ]
-    return_code = run_streaming(command, echo=echo)
+    # 署名の詳細出力は --verbose のときだけ見せる (従来の挙動を保つ)。
+    return_code = run_streaming(command, echo=echo, quiet=not echo)
     if return_code != 0 or not signature.is_file():
         raise BuildError(
             f"署名に失敗しました (終了コード {return_code})。",
@@ -254,6 +308,7 @@ def produce(
     echo: bool = False,
 ) -> ReleaseArtifacts:
     """配布に必要な成果物をまとめて作る。"""
+    _remove_stale_artifacts(iso_path)
     artifacts = ReleaseArtifacts(iso=iso_path)
     artifacts.sha256 = sha256_file(iso_path)
 

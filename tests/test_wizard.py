@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -21,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from frosted import ui, wizard  # noqa: E402
 from frosted.catalog import PRESETS  # noqa: E402
+from frosted.recipe import KNOWN_COMPRESSION, Recipe  # noqa: E402
 
 
 def _ask(queue):
@@ -146,6 +148,18 @@ class PresetDefaultsTest(unittest.TestCase):
         recipe = WizardHarness().run(preset_key="minimal", name="tiny")
         self.assertEqual(recipe.desktop.environment, "none")
 
+    def test_every_preset_output_round_trips_through_validation(self) -> None:
+        """ウィザードが保存するレシピは、次のロードで必ず通ること。"""
+        for key in PRESETS:
+            with self.subTest(preset=key):
+                recipe = WizardHarness().run(
+                    preset_key=key, name=f"valid-{key}"
+                )
+                validated = Recipe.from_dict(
+                    recipe.to_dict(), path=Path("recipe.toml")
+                )
+                self.assertEqual(validated.iso.name, recipe.iso.name)
+
 
 class AnswerApplicationTest(unittest.TestCase):
     def test_name_and_version_are_applied(self) -> None:
@@ -211,6 +225,38 @@ class ValidatorTest(unittest.TestCase):
         self.assertIsNone(wizard._validate_locale("ja_JP.UTF-8"))
         self.assertIsNone(wizard._validate_locale("C.UTF-8"))
         self.assertIsNotNone(wizard._validate_locale("nonsense!!"))
+
+    def test_hostname_validator(self) -> None:
+        self.assertIsNone(wizard._validate_hostname("my-linux"))
+        self.assertIsNotNone(wizard._validate_hostname("bad host"))
+        self.assertIsNotNone(wizard._validate_hostname("-bad"))
+
+    def test_version_validator(self) -> None:
+        self.assertIsNone(wizard._validate_version("1.0"))
+        self.assertIsNone(wizard._validate_version("2.0-beta1"))
+        self.assertIsNotNone(wizard._validate_version("1/2"))
+        self.assertIsNotNone(wizard._validate_version("1 2"))
+
+    def test_compression_choices_are_accepted_by_the_recipe(self) -> None:
+        """ウィザードで選べる値は、レシピ検証でも通る値だけにすること。"""
+        for key, _description in wizard.COMPRESSION_CHOICES:
+            with self.subTest(compression=key):
+                self.assertIn(key, KNOWN_COMPRESSION)
+
+
+class HostDefaultsTest(unittest.TestCase):
+    """ホスト情報が無いとき、UI の言語に合った無難な既定値を選ぶこと。"""
+
+    def _locale_for(self, language: str) -> str:
+        with mock.patch.dict(os.environ, {"LANG": "C"}, clear=True):
+            with mock.patch.object(wizard, "get_language", return_value=language):
+                return wizard._host_locale()
+
+    def test_c_locale_with_english_ui_uses_c_utf8(self) -> None:
+        self.assertEqual(self._locale_for("en"), "C.UTF-8")
+
+    def test_c_locale_with_japanese_ui_uses_ja_jp(self) -> None:
+        self.assertEqual(self._locale_for("ja"), "ja_JP.UTF-8")
 
 
 class SummaryTest(unittest.TestCase):

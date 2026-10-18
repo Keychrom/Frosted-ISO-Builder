@@ -42,6 +42,10 @@ class WhichTest(unittest.TestCase):
             fake_dir = Path(tmp)
             target = fake_dir / "sbin-only-command"
             target.write_text("#!/bin/sh\n", encoding="utf-8")
+            # Linux の os.access(X_OK) は実行ビットが無いと False になる。
+            # Windows では既存ファイルなら True なので、ここを忘れると
+            # Windows だけで通るテストになってしまう。
+            target.chmod(0o755)
 
             # PATH からは見つからない状態にする
             with mock.patch.object(runner.shutil, "which", return_value=None):
@@ -67,6 +71,31 @@ class WhichTest(unittest.TestCase):
             with mock.patch.object(runner.shutil, "which", return_value=None):
                 with mock.patch.object(runner, "FALLBACK_DIRS", (tmp,)):
                     self.assertIsNone(runner.which("nothing-here"))
+
+
+class WorkdirCheckTest(unittest.TestCase):
+    def test_path_with_spaces_fails_on_posix(self) -> None:
+        """live-build は空白を含むディレクトリでビルドできない。"""
+        recipe = Recipe()
+        with tempfile.TemporaryDirectory(prefix="frosted space ") as tmp:
+            recipe.path = Path(tmp) / "recipe.toml"
+            recipe.build.workdir = "build"
+            with mock.patch.object(preflight, "_IS_WINDOWS", False):
+                check = preflight._check_workdir(recipe)
+        self.assertEqual(check.status, "fail")
+
+    def test_root_workdir_fails_on_posix(self) -> None:
+        recipe = Recipe()
+        recipe.build.workdir = "/"
+        with mock.patch.object(preflight, "_IS_WINDOWS", False):
+            check = preflight._check_workdir(recipe)
+        self.assertEqual(check.status, "fail")
+
+    def test_windows_skips_the_check(self) -> None:
+        recipe = Recipe()
+        with mock.patch.object(preflight, "_IS_WINDOWS", True):
+            check = preflight._check_workdir(recipe)
+        self.assertEqual(check.status, "skip")
 
 
 class AptHintTest(unittest.TestCase):

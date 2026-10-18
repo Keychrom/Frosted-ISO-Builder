@@ -83,7 +83,7 @@ exec chromium \
     "$URL"
 '''
 mode = "0755"
-Keychrom = "root:root"
+owner = "root:root"
 
 [[files.write]]
 path = "/etc/xdg/autostart/00-kiosk.desktop"
@@ -97,7 +97,7 @@ Terminal=false
 X-GNOME-Autostart-enabled=true
 '''
 mode = "0644"
-Keychrom = "root:root"
+owner = "root:root"
 
 [[files.write]]
 path = "/etc/kiosk-url"
@@ -105,7 +105,7 @@ content = '''
 http://example.com
 '''
 mode = "0644"
-Keychrom = "root:root"
+owner = "root:root"
 
 [boot]
 persistence = false

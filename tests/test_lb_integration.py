@@ -144,6 +144,16 @@ class LbConfigAcceptanceTest(unittest.TestCase):
             recipe.iso.name = "citest"
             self._check(recipe)
 
+    def test_memtest_recipe_is_accepted(self) -> None:
+        """memtest 有効時は --memtest memtest86+ を出す必要がある。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe = Recipe()
+            recipe.path = Path(tmp) / "recipe.toml"
+            recipe.build.workdir = "build"
+            recipe.iso.name = "ci-memtest"
+            recipe.build.memtest = True
+            self._check(recipe)
+
     def test_each_preset_is_accepted(self) -> None:
         for preset in PRESETS:
             with self.subTest(preset=preset), tempfile.TemporaryDirectory() as tmp:

@@ -52,7 +52,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 依存を入れる
-        run: apt-get install -y --no-install-recommends python3 live-build
+        # live-build の Depends は cpio と debootstrap だけ。xorriso などは
+        # Recommends 以下なので、--no-install-recommends では doctor が落ちる。
+        run: |
+          apt-get install -y --no-install-recommends \
+            python3 live-build xorriso squashfs-tools rsync uuid-runtime
 
       - name: 環境を診断する
         run: python3 bin/frosted doctor --no-network
@@ -93,8 +97,9 @@ jobs:
       - name: 依存を入れる
         run: |
           apt-get install -y --no-install-recommends \
-            python3 live-build xorriso squashfs-tools isolinux syslinux-common \
-            grub-efi-amd64-bin grub-pc-bin mtools dosfstools
+            python3 live-build xorriso squashfs-tools rsync uuid-runtime \
+            isolinux syslinux-common grub-efi-amd64-bin grub-pc-bin \
+            mtools dosfstools
 
       - name: 必須ツールが揃っていること
         run: python3 bin/frosted doctor --no-network

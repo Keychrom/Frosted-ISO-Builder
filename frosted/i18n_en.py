@@ -383,6 +383,9 @@ EN: dict[str, str] = {
     "チェックサムファイルを読めませんでした: {name}": (
         "Could not read the checksum file: {name}"
     ),
+    "チェックサムファイルにこの ISO の行がありません: {name}": (
+        "No entry for this ISO in the checksum file: {name}"
+    ),
     "ISO だけを渡されている場合は検証できません。": (
         "If you were given only the ISO, it cannot be verified."
     ),
@@ -413,6 +416,12 @@ EN: dict[str, str] = {
     ),
     "chroot に入ります。抜けるときは exit と入力してください。": (
         "Opening a shell in the chroot. Type exit to leave."
+    ),
+    "frosted test は今のところ amd64/i386 用です。": (
+        "frosted test currently supports amd64/i386 only."
+    ),
+    "arm64 の ISO は実機か、qemu-system-aarch64 と AAVMF で起動してください。": (
+        "Boot arm64 ISOs on real hardware or with qemu-system-aarch64 and AAVMF."
     ),
     "QEMU がインストールされていません。": "QEMU is not installed.",
     "UEFI 用のファームウェア (OVMF) が見つかりません。": (
@@ -557,6 +566,59 @@ EN: dict[str, str] = {
         "lowercase letters, digits, _ and - only (max 32)."
     ),
     "root は使えません。": "root is not allowed.",
+    "半角小文字・数字・ハイフンのみ、63 文字以内。例: mylinux": (
+        "Lowercase letters, digits and hyphens only, max 63, e.g. mylinux"
+    ),
+    "半角英数字と . _ + ~ - のみ。空白や / は使えません。": (
+        "Only ASCII letters, digits and . _ + ~ - are allowed; "
+        "spaces and / are not."
+    ),
+    # ---- recipe.py: 旧フィールド名の移行 ---------------------------------
+    "Keychrom は owner の旧名です。": "Keychrom is an old name for owner.",
+    "owner に書き換えてください。": "Please rename it to owner.",
+    "owner と Keychrom は同時に指定できません。": (
+        "owner and Keychrom cannot be used together."
+    ),
+    "Keychrom は旧名です。owner だけを使ってください。": (
+        "Keychrom is an old name; use owner only."
+    ),
+    "作業ディレクトリが空か、改行を含んでいます。": (
+        "The work directory is empty or contains a newline."
+    ),
+    "レシピの下の build など、通常のディレクトリ名を指定してください。": (
+        "Specify a normal directory name such as build under the recipe."
+    ),
+    "build.workdir がレシピのあるディレクトリやその親、"
+    "ホーム、ルートを指していないか確認してください。": (
+        "Check that build.workdir does not point to the recipe directory, "
+        "one of its parents, your home directory, or the filesystem root."
+    ),
+    "live-build は空白を含むパスではビルドできません。"
+    " build.workdir を空白の無い場所に変更してください。": (
+        "live-build cannot build in a path containing spaces. "
+        "Change build.workdir to a location without spaces."
+    ),
+    "build.workdir を build など、レシピの下のディレクトリに変更してください。": (
+        "Change build.workdir to a directory under the recipe, such as build."
+    ),
+    "Windows ではビルドしないため確認しません": (
+        "Skipped because the build does not run on Windows."
+    ),
+    # ---- livebuild.py / recipe.py: arm64 のブートローダ ----------------
+    "arm64 では x86 用のブートローダ "
+    "(syslinux/grub-pc/grub-legacy) が使えません。除外されます。": (
+        "x86 bootloaders (syslinux/grub-pc/grub-legacy) cannot be used on "
+        "arm64; they will be dropped."
+    ),
+    "arm64 は grub-efi のみを使います。": "arm64 uses grub-efi only.",
+    "arm64 では x86 用のブートローダ "
+    "(syslinux/grub-pc/grub-legacy) を除外しました。": (
+        "Dropped x86 bootloaders (syslinux/grub-pc/grub-legacy) on arm64."
+    ),
+    "arm64 では grub-efi を使います。": "Using grub-efi on arm64.",
+    "ブートローダが空だったので grub-efi を使います。": (
+        "No bootloader was specified; using grub-efi."
+    ),
     "例: Asia/Tokyo / Europe/Berlin / UTC": "e.g. Asia/Tokyo, Europe/Berlin, UTC",
     "例: ja_JP.UTF-8 / en_US.UTF-8 / C.UTF-8": (
         "e.g. ja_JP.UTF-8, en_US.UTF-8, C.UTF-8"
@@ -571,6 +633,7 @@ EN: dict[str, str] = {
     "TOML を読むために標準ライブラリの tomllib を使っています。": (
         "The standard library's tomllib is used to read TOML."
     ),
+    "ファイル操作に失敗しました: {error}": "File operation failed: {error}",
     "中断しました。": "Aborted.",
     "やめました。": "Cancelled.",
     "完了しました。": "Done.",
@@ -610,6 +673,8 @@ EN: dict[str, str] = {
     '# 書式が壊れていると sudo が全く使えなくなるので、ここで検証しておく': '# A broken file would disable sudo entirely, so check it here.',
     '# 公開鍵はレシピで指定されていない。パスワード認証が無効なら SSH ログインできない。': '# No public keys in the recipe. With password auth off, SSH login is impossible.',
     '# --- 起動時の設定スクリプト ---': '# --- boot-time setup script ---',
+    '# root のパスワードなどが入るので、ライブユーザーからは読めないようにする。': '# Contains the root password, so keep it unreadable to the live user.',
+    '# systemd は root で実行するため 0700 でも動く。': '# systemd runs it as root, so mode 0700 is fine.',
     '# live-config がライブユーザーを作ったあとに 1 度だけ実行されます。': '# Runs once, after live-config has created the live user.',
     '# すべての操作は何度実行しても同じ結果になるように書いています。': '# Every step is written to be idempotent.',
         "# [daemon] セクションに自動ログインの設定を足す": "# Add autologin settings to the [daemon] section",
@@ -722,6 +787,12 @@ PREFIXES: dict[str, str] = {
     # 検証 (`recipe.py`)
     "ISO の名前は必須です。": "The ISO name is required.",
     "使えない名前です": "Invalid name:",
+    "使えないバージョンです": "Invalid version:",
+    "この作業ディレクトリは削除できません": (
+        "Refusing to delete this work directory:"
+    ),
+    "空白を含みます": "contains a space:",
+    "ルートディレクトリを指しています": "points at the filesystem root:",
     "使えないラベルです": "Invalid label:",
     "使えないホスト名です": "Invalid hostname:",
     "使えないロケールです": "Invalid locale:",

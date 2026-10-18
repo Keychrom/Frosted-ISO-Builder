@@ -168,6 +168,8 @@ LANGUAGE_PACKS: dict[str, LanguagePack] = {
             "fcitx5-frontend-gtk3",
             "fcitx5-frontend-gtk4",
             "fcitx5-frontend-qt5",
+            "fcitx5-frontend-qt6",
+            "im-config",
             "manpages-ja",
         ),
     ),
@@ -180,6 +182,11 @@ LANGUAGE_PACKS: dict[str, LanguagePack] = {
             "fonts-nanum",
             "fcitx5",
             "fcitx5-hangul",
+            "fcitx5-frontend-gtk3",
+            "fcitx5-frontend-gtk4",
+            "fcitx5-frontend-qt5",
+            "fcitx5-frontend-qt6",
+            "im-config",
             "manpages-ko",
         ),
     ),
@@ -191,6 +198,11 @@ LANGUAGE_PACKS: dict[str, LanguagePack] = {
             "fonts-noto-cjk",
             "fcitx5",
             "fcitx5-chinese-addons",
+            "fcitx5-frontend-gtk3",
+            "fcitx5-frontend-gtk4",
+            "fcitx5-frontend-qt5",
+            "fcitx5-frontend-qt6",
+            "im-config",
             "manpages-zh",
         ),
     ),
@@ -403,7 +415,7 @@ def _apply_kiosk(recipe: Recipe) -> None:
                 path=KIOSK_LAUNCHER,
                 content=t_block(KIOSK_START_SCRIPT),
                 mode="0755",
-                Keychrom="root:root",
+                owner="root:root",
             )
         )
     if not any(w.path == KIOSK_AUTOSTART_PATH for w in recipe.files.write):
@@ -412,7 +424,7 @@ def _apply_kiosk(recipe: Recipe) -> None:
                 path=KIOSK_AUTOSTART_PATH,
                 content=t_block(KIOSK_AUTOSTART),
                 mode="0644",
-                Keychrom="root:root",
+                owner="root:root",
             )
         )
     if not any(w.path == KIOSK_URL_FILE for w in recipe.files.write):
@@ -421,7 +433,7 @@ def _apply_kiosk(recipe: Recipe) -> None:
                 path=KIOSK_URL_FILE,
                 content="http://example.com\n",
                 mode="0644",
-                Keychrom="root:root",
+                owner="root:root",
             )
         )
 

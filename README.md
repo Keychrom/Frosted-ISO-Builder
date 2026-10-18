@@ -65,7 +65,7 @@ inside a container. Use a real machine or a VM.
 
 ```sh
 git clone https://github.com/Keychrom/Frosted-ISO-Builder
-cd frosted-iso-builder
+cd Frosted-ISO-Builder
 
 # Install with its dependencies (recommended)
 sudo ./install.sh --with-deps
@@ -81,6 +81,9 @@ sudo apt install live-build debootstrap xorriso squashfs-tools cpio rsync \
     uuid-runtime mtools dosfstools syslinux-common isolinux \
     grub-efi-amd64-bin grub-pc-bin fakeroot gnupg
 ```
+
+On arm64, use `grub-efi-arm64-bin` instead of the amd64/x86 GRUB packages.
+`./install.sh --with-deps` picks the right ones for the host architecture.
 
 You can also run it without installing:
 
@@ -204,7 +207,7 @@ validation warns you about that combination.
 source = "./assets/motd"     # relative to the recipe
 target = "/etc/motd"         # absolute path inside the image
 mode = "0644"                # optional
-Keychrom = "root:root"          # optional
+owner = "root:root"             # optional (old name: Keychrom)
 
 # Write content directly into the image
 [[files.write]]
@@ -358,9 +361,9 @@ everything with one command:
 frosted verify mylinux-1.0-amd64.iso
 ```
 
-`verify` checks the checksum, the signature and the build metadata and reports
-the result clearly. You can of course also use `sha256sum -c SHA256SUMS` and
-`gpg --verify` directly.
+`verify` checks the checksum and the signature, and reports the build metadata.
+The result is shown clearly. You can of course also use `sha256sum -c
+SHA256SUMS` and `gpg --verify` directly.
 
 ### Pre-release checklist
 
@@ -514,7 +517,7 @@ There are no runtime dependencies. Python 3.11 or newer is all you need.
 
 ```sh
 git clone https://github.com/Keychrom/Frosted-ISO-Builder
-cd frosted-iso-builder
+cd Frosted-ISO-Builder
 
 # Tests (standard library unittest only)
 python3 -m unittest discover -s tests -t . -v
@@ -554,7 +557,7 @@ python3 bin/frosted --help
 
 Being straight with you.
 
-**Verified (148 automated tests plus CI)**
+**Verified (the automated test suite plus CI)**
 
 - Reading, writing and validating recipes, including rejecting bad input and
   round-tripping TOML

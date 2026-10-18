@@ -408,13 +408,21 @@ class RecipeKnobsReachTheOutputTest(unittest.TestCase):
         for attribute, flag in (
             ("cache", "--cache"),
             ("firmware", "--firmware-chroot"),
-            ("memtest", "--memtest"),
         ):
             with self.subTest(setting=attribute):
                 recipe = _basic_recipe()
                 setattr(recipe.build, attribute, False)
                 argv, _ = build_lb_argv(recipe)
                 self.assertEqual(argv[argv.index(flag) + 1], "false")
+
+    def test_memtest_uses_the_values_live_build_accepts(self) -> None:
+        """--memtest は真偽値ではなく memtest86+ / none を取る。"""
+        for enabled, expected in ((True, "memtest86+"), (False, "none")):
+            with self.subTest(enabled=enabled):
+                recipe = _basic_recipe()
+                recipe.build.memtest = enabled
+                argv, _ = build_lb_argv(recipe)
+                self.assertEqual(argv[argv.index("--memtest") + 1], expected)
 
 
 class IncludeMaterializationTest(unittest.TestCase):
@@ -428,6 +436,24 @@ class IncludeMaterializationTest(unittest.TestCase):
             target = project.workdir() / "config" / "includes.chroot" / "etc" / "motd"
             self.assertTrue(target.is_file())
             self.assertEqual(target.read_text(encoding="utf-8"), "welcome\n")
+
+    def test_files_owner_reaches_the_permission_hook(self) -> None:
+        recipe = _basic_recipe()
+        recipe.files.write.append(
+            WriteEntry(path="/etc/x", content="x", mode="0600", owner="user:user")
+        )
+        with Project(recipe) as project:
+            project.generate()
+            hook = (
+                project.workdir()
+                / "config"
+                / "hooks"
+                / "live"
+                / "0500-permissions.hook.chroot"
+            )
+            self.assertIn(
+                "chown user:user /etc/x", hook.read_text(encoding="utf-8")
+            )
 
     def test_files_copy_file(self) -> None:
         recipe = _basic_recipe()
@@ -557,7 +583,7 @@ class ShellSyntaxTest(unittest.TestCase):
         recipe.user.autologin = False
         recipe.packages.exclude = ["vim"]
         recipe.files.write.append(
-            WriteEntry(path="/etc/x", content="x", mode="0600", Keychrom="root:root")
+            WriteEntry(path="/etc/x", content="x", mode="0600", owner="root:root")
         )
         with Project(recipe) as project:
             project.generate()
@@ -566,6 +592,23 @@ class ShellSyntaxTest(unittest.TestCase):
             for hook in hooks:
                 with self.subTest(hook=hook.name):
                     self._check(hook.name, hook.read_text(encoding="utf-8"))
+
+    def test_boot_setup_script_is_not_world_readable(self) -> None:
+        """root のパスワードが入るスクリプトをライブユーザーに読ませない。"""
+        recipe = _basic_recipe()
+        recipe.user.password = "secret"
+        with Project(recipe) as project:
+            project.generate()
+            hook = (
+                project.workdir()
+                / "config"
+                / "hooks"
+                / "live"
+                / "0600-boot-setup.hook.chroot"
+            )
+            text = hook.read_text(encoding="utf-8")
+            self.assertIn("chmod 0700", text)
+            self.assertNotIn("chmod 0755", text)
 
     def test_autologin_hook_for_each_desktop(self) -> None:
         """ディスプレイマネージャごとの分岐が構文的に壊れていないこと。"""
@@ -597,7 +640,9 @@ class AutoConfigExecutionTest(unittest.TestCase):
     なっているか (とくにシェルの引用符が正しいか) を確かめられる。
     """
 
-    def _run(self, project: Project) -> list[str]:
+    def _run(
+        self, project: Project, extra_args: list[str] | None = None
+    ) -> list[str]:
         bindir = project.root / "fakebin"
         bindir.mkdir(exist_ok=True)
         fake_lb = bindir / "lb"
@@ -611,7 +656,7 @@ class AutoConfigExecutionTest(unittest.TestCase):
 
         script = (project.workdir() / "auto" / "config").read_text(encoding="utf-8")
         proc = subprocess.run(
-            [SH],
+            [SH, "-s", "--", *(extra_args or [])],
             input=script,
             capture_output=True,
             text=True,
@@ -628,6 +673,13 @@ class AutoConfigExecutionTest(unittest.TestCase):
             args = self._run(project)
             self.assertEqual(args[0], "config")
             self.assertEqual(args[1], "noauto")
+
+    def test_extra_arguments_are_forwarded_to_lb_config(self) -> None:
+        """lb config --verbose のような追加引数が実行されず、そのまま渡る。"""
+        with Project(_basic_recipe()) as project:
+            project.generate()
+            args = self._run(project, ["--verbose"])
+            self.assertIn("--verbose", args)
 
     def test_values_with_spaces_survive_as_single_arguments(self) -> None:
         """ブートパラメータは空白を含むので、1 つの引数として渡る必要がある。"""
@@ -660,6 +712,26 @@ class AutoConfigExecutionTest(unittest.TestCase):
             project.generate()
             args = self._run(project)
             self.assertEqual(args[args.index("--iso-volume") + 1], "MYLINUX")
+
+
+class BootloaderSelectionTest(unittest.TestCase):
+    def test_arm64_drops_x86_bootloaders(self) -> None:
+        recipe = _basic_recipe()
+        recipe.iso.architecture = "arm64"
+        recipe.build.bootloaders = ["syslinux", "grub-pc"]
+        argv, warnings = build_lb_argv(recipe)
+        self.assertEqual(argv[argv.index("--bootloaders") + 1], "grub-efi")
+        self.assertTrue(any("arm64" in warning for warning in warnings))
+
+    def test_i386_keeps_syslinux(self) -> None:
+        recipe = _basic_recipe()
+        recipe.iso.architecture = "i386"
+        recipe.build.bootloaders = ["syslinux", "grub-efi"]
+        argv, warnings = build_lb_argv(recipe)
+        self.assertEqual(
+            argv[argv.index("--bootloaders") + 1], "syslinux grub-efi"
+        )
+        self.assertFalse(any("syslinux" in warning for warning in warnings))
 
 
 if __name__ == "__main__":

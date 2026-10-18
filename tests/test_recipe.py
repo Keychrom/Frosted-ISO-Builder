@@ -309,6 +309,34 @@ class TomlRoundTripTest(unittest.TestCase):
         loaded = self._roundtrip(original)
         self.assertEqual(loaded.files.write[0].content, content)
 
+    def test_empty_content_roundtrip(self) -> None:
+        """空ファイルを作る指定が、保存・再読込で消えないこと。"""
+        original = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x"},
+                "files": {"write": [{"path": "/etc/empty", "content": ""}]},
+            }
+        )
+        loaded = self._roundtrip(original)
+        self.assertEqual(loaded.files.write[0].content, "")
+
+    def test_empty_version_roundtrip(self) -> None:
+        """空の version は出力名から省く指定なので、既定値に戻さない。"""
+        original = Recipe.from_dict(
+            {"version": 1, "iso": {"name": "x", "version": ""}}
+        )
+        loaded = self._roundtrip(original)
+        self.assertEqual(loaded.iso.version, "")
+        self.assertEqual(loaded.iso.resolved_output(), "x-amd64.iso")
+
+    def test_empty_fullname_roundtrip(self) -> None:
+        original = Recipe.from_dict(
+            {"version": 1, "iso": {"name": "x"}, "user": {"fullname": ""}}
+        )
+        loaded = self._roundtrip(original)
+        self.assertEqual(loaded.user.fullname, "")
+
     def test_password_hash_roundtrip(self) -> None:
         """$ を含むハッシュもそのまま往復すること。"""
         hashed = "$6$rounds=5000$abcdef$ghijklmnop"
@@ -336,6 +364,127 @@ class TomlRoundTripTest(unittest.TestCase):
         self.assertEqual(parsed["iso"]["name"], "roundtrip")
         self.assertEqual(parsed["files"]["write"][0]["content"], "line1\nline2\n")
         self.assertEqual(parsed["files"]["write"][0]["mode"], "0600")
+
+    def test_files_owner_roundtrips_under_the_new_key(self) -> None:
+        import tomllib
+
+        original = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x"},
+                "files": {
+                    "write": [
+                        {
+                            "path": "/etc/x",
+                            "content": "x",
+                            "owner": "user:user",
+                        }
+                    ]
+                },
+            }
+        )
+        self.assertEqual(original.files.write[0].owner, "user:user")
+
+        parsed = tomllib.loads(dumps(original.to_dict()))
+        entry = parsed["files"]["write"][0]
+        self.assertEqual(entry["owner"], "user:user")
+        self.assertNotIn("Keychrom", entry)
+
+    def test_legacy_keychrom_is_accepted_with_a_warning(self) -> None:
+        recipe = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x"},
+                "files": {
+                    "write": [
+                        {
+                            "path": "/etc/x",
+                            "content": "x",
+                            "Keychrom": "user:user",
+                        }
+                    ]
+                },
+            }
+        )
+        self.assertEqual(recipe.files.write[0].owner, "user:user")
+        self.assertTrue(
+            any("Keychrom" in issue.where for issue in recipe.warnings),
+            "旧名を使ったことを警告していない",
+        )
+
+    def test_owner_and_keychrom_together_are_rejected(self) -> None:
+        with self.assertRaises(RecipeProblems):
+            Recipe.from_dict(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "files": {
+                        "write": [
+                            {
+                                "path": "/etc/x",
+                                "content": "x",
+                                "owner": "user:user",
+                                "Keychrom": "root:root",
+                            }
+                        ]
+                    },
+                }
+            )
+
+    def test_load_accepts_utf8_bom(self) -> None:
+        """Windows のエディタが付ける BOM を構文エラーにしない。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "recipe.toml"
+            path.write_bytes(
+                b'\xef\xbb\xbfversion = 1\n[iso]\nname = "bomtest"\n'
+            )
+            recipe = Recipe.load(path)
+        self.assertEqual(recipe.iso.name, "bomtest")
+
+    def test_bad_version_is_rejected(self) -> None:
+        with self.assertRaises(RecipeProblems) as caught:
+            Recipe.from_dict(
+                {"version": 1, "iso": {"name": "x", "version": "1/2"}}
+            )
+        self.assertTrue(
+            any(issue.where == "iso.version" for issue in caught.exception.issues)
+        )
+
+    def test_empty_workdir_is_rejected(self) -> None:
+        with self.assertRaises(RecipeProblems) as caught:
+            Recipe.from_dict(
+                {"version": 1, "iso": {"name": "x"}, "build": {"workdir": ""}}
+            )
+        self.assertTrue(
+            any(
+                issue.where == "build.workdir"
+                for issue in caught.exception.issues
+            )
+        )
+
+    def test_i386_does_not_warn_about_syslinux(self) -> None:
+        recipe = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x", "architecture": "i386"},
+                "build": {"bootloaders": ["syslinux", "grub-efi"]},
+            }
+        )
+        self.assertFalse(
+            any(issue.where == "build.bootloaders" for issue in recipe.warnings)
+        )
+
+    def test_arm64_warns_about_x86_bootloaders(self) -> None:
+        recipe = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x", "architecture": "arm64"},
+                "build": {"bootloaders": ["syslinux", "grub-efi"]},
+            }
+        )
+        self.assertTrue(
+            any(issue.where == "build.bootloaders" for issue in recipe.warnings)
+        )
 
 
 class DerivedValueTest(unittest.TestCase):

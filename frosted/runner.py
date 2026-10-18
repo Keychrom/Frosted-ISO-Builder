@@ -71,6 +71,11 @@ def privileged(cmd: Sequence[str]) -> list[str]:
     """必要なら sudo を前置する。
 
     live-build は root で動かす必要がある。すでに root なら何もしない。
+
+    `-E` (環境の引き継ぎ) は使わない。sudoers がコマンドを限定している
+    環境では SETENV が無く、`sudo -E` が
+    「not allowed to preserve the environment」で失敗するため。
+    live-build の設定は auto/config に入っているので環境変数は不要。
     """
     if is_root():
         return list(cmd)
@@ -80,7 +85,7 @@ def privileged(cmd: Sequence[str]) -> list[str]:
             "root 権限が必要ですが sudo が見つかりません。",
             hint="root でログインし直すか、sudo をインストールしてください。",
         )
-    return [sudo, "-E", *cmd]
+    return [sudo, *cmd]
 
 
 def run_capture(
@@ -111,8 +116,14 @@ def run_streaming(
     log_path: Path | None = None,
     env: dict[str, str] | None = None,
     echo: bool = True,
+    quiet: bool = False,
 ) -> int:
     """コマンドを実行し、出力を画面とログの両方に流す。
+
+    echo はコマンド行を表示するかどうか (--verbose 用)、quiet は
+    子プロセスの出力を画面に出さないかどうか (内部コマンド用)。
+    長時間かかる lb build の進捗は既定で見える必要があるので、
+    この 2 つは分けてある。
 
     Ctrl-C を受けたら子プロセスにも SIGINT を送ってから中断する。
     ビルド途中で投げ出すと live-build のマウントが残ることがあるため、
@@ -162,7 +173,7 @@ def run_streaming(
     try:
         assert process.stdout is not None
         for line in process.stdout:
-            if echo:
+            if not quiet:
                 sys.stdout.write(line)
                 sys.stdout.flush()
             if log_file:

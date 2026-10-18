@@ -79,6 +79,23 @@ class ChecksumFileTest(unittest.TestCase):
             self.assertIn(second.name, text)
             self.assertEqual(len([ln for ln in text.splitlines() if ln.strip()]), 2)
 
+    def test_replaces_a_binary_marker_line(self) -> None:
+        """sha256sum -b の `*name` 行も同じ ISO の行として置き換える。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            iso = self._iso(tmp)
+            sums = Path(tmp) / "SHA256SUMS"
+            sums.write_text(f"{'a' * 64} *{iso.name}\n", encoding="utf-8")
+
+            release.write_checksums(iso, "b" * 64)
+
+            lines = [
+                line
+                for line in sums.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(lines), 1)
+            self.assertIn("b" * 64, lines[0])
+
     def test_rewriting_replaces_not_appends(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             iso = self._iso(tmp)
@@ -97,6 +114,45 @@ class ChecksumFileTest(unittest.TestCase):
             for name in ("SHA256SUMS", f"{iso.name}.sha256"):
                 with self.subTest(name=name):
                     self.assertNotIn(b"\r", (Path(tmp) / name).read_bytes())
+
+
+class StaleArtifactTest(unittest.TestCase):
+    def test_produce_removes_artifacts_from_the_previous_build(self) -> None:
+        """--no-checksum や署名失敗で古い成果物を残さない。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            iso = root / "demo.iso"
+            iso.write_bytes(b"new iso")
+
+            stale = [
+                root / "demo.iso.sha256",
+                root / "demo.iso.build-info.json",
+                root / "demo.iso.asc",
+            ]
+            for path in stale:
+                path.write_text("stale\n", encoding="utf-8")
+            sums = root / "SHA256SUMS"
+            sums.write_text(
+                f"{'a' * 64}  demo.iso\n{'b' * 64}  other.iso\n",
+                encoding="utf-8",
+            )
+
+            release.produce(
+                recipe=Recipe(),
+                iso_path=iso,
+                workdir=root / "build",
+                bootappend="",
+                lb_args=[],
+                checksums=False,
+                build_info=False,
+            )
+
+            for path in stale:
+                with self.subTest(path=path.name):
+                    self.assertFalse(path.exists())
+            text = sums.read_text(encoding="utf-8")
+            self.assertNotIn("demo.iso", text)
+            self.assertIn("other.iso", text)
 
 
 class DigestLookupTest(unittest.TestCase):
@@ -147,6 +203,108 @@ class DigestLookupTest(unittest.TestCase):
                 tmp, f"{'a' * 64}  one.iso\n{'b' * 64}  two.iso\n"
             )
             self.assertIsNone(_expected_digest(sums, "missing.iso"))
+
+
+class VerifyCommandTest(unittest.TestCase):
+    """verify は「検証していないのに成功」と言ってはいけない。"""
+
+    ISO_BYTES = b"fake iso"
+
+    def _run(
+        self,
+        tmp: str,
+        sums_text: str | None,
+        *,
+        signature: bool = False,
+        build_info_text: str | None = None,
+    ) -> tuple[int, str]:
+        import argparse
+        import contextlib
+        import io
+
+        from frosted import cli
+
+        iso = Path(tmp) / "image.iso"
+        iso.write_bytes(self.ISO_BYTES)
+        if sums_text is not None:
+            (Path(tmp) / "image.iso.sha256").write_text(
+                sums_text, encoding="utf-8", newline="\n"
+            )
+        if signature:
+            (Path(tmp) / "image.iso.asc").write_text(
+                "-----BEGIN PGP SIGNATURE-----\n", encoding="utf-8"
+            )
+        if build_info_text is not None:
+            (Path(tmp) / "image.iso.build-info.json").write_text(
+                build_info_text, encoding="utf-8"
+            )
+
+        args = argparse.Namespace(
+            iso=str(iso), sums=None, signature=None, verbose=False
+        )
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.cmd_verify(args)
+        return code, out.getvalue() + err.getvalue()
+
+    def test_matching_checksum_succeeds(self) -> None:
+        digest = release.sha256_bytes(self.ISO_BYTES)
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _text = self._run(tmp, f"{digest}  image.iso\n")
+        self.assertEqual(code, 0)
+
+    def test_mismatched_checksum_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _text = self._run(tmp, f"{'0' * 64}  image.iso\n")
+        self.assertEqual(code, 1)
+
+    def test_checksum_file_without_this_iso_fails(self) -> None:
+        """該当行が無いだけなのに成功扱いになっていた回帰テスト。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _text = self._run(
+                tmp,
+                f"{'0' * 64}  other.iso\n{'1' * 64}  another.iso\n",
+            )
+        self.assertEqual(code, 1)
+
+    def test_nothing_to_verify_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _text = self._run(tmp, None)
+        self.assertEqual(code, 1)
+
+    def test_malformed_build_info_does_not_crash(self) -> None:
+        """配布物の build-info.json が壊れていても検証自体は続ける。"""
+        digest = release.sha256_bytes(self.ISO_BYTES)
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _text = self._run(
+                tmp,
+                f"{digest}  image.iso\n",
+                build_info_text="[]\n",
+            )
+        self.assertEqual(code, 0)
+
+    def test_signature_without_gpg_is_not_a_success(self) -> None:
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(release, "gpg_available", return_value=False):
+                code, _text = self._run(tmp, None, signature=True)
+        self.assertEqual(code, 1)
+
+    def test_signature_can_verify_even_if_checksum_has_no_entry(self) -> None:
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(release, "gpg_available", return_value=True):
+                with mock.patch(
+                    "frosted.cli.run_streaming", return_value=0
+                ):
+                    code, _text = self._run(
+                        tmp,
+                        f"{'0' * 64}  other.iso\n{'1' * 64}  another.iso\n",
+                        signature=True,
+                    )
+        self.assertEqual(code, 0)
 
 
 class BuildInfoTest(unittest.TestCase):

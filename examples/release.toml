@@ -58,6 +58,11 @@ extra_packages = [
     "fonts-noto-color-emoji",
     "fcitx5",
     "fcitx5-mozc",
+    "fcitx5-frontend-gtk3",
+    "fcitx5-frontend-gtk4",
+    "fcitx5-frontend-qt5",
+    "fcitx5-frontend-qt6",
+    "im-config",
 ]
 
 # ライブ環境を名乗るためのファイルを差し替える。
@@ -73,13 +78,13 @@ content = '''
 インストールしたい場合は debian-installer 入りのイメージを使ってください。
 '''
 mode = "0644"
-Keychrom = "root:root"
+owner = "root:root"
 
 [[files.write]]
 path = "/etc/issue"
 content = "My Distro 1.0 \\n \\l\n"
 mode = "0644"
-Keychrom = "root:root"
+owner = "root:root"
 
 [build]
 compression = "xz"

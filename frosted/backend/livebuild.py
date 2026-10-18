@@ -100,6 +100,9 @@ class OptionSpellings:
         self._supported = supported
         self.probed = probed
         self.notes: list[str] = []
+        #: build_lb_args が「この lb には無い」と判断した設定キー。
+        #: ブートローダの読み替えのような通常の警告と区別するために持つ。
+        self.missing: list[str] = []
 
     def get(self, key: str) -> str | None:
         """キーに対応する実際のオプション名を返す。使えるものが無ければ None。"""
@@ -259,12 +262,18 @@ def _effective_bootloaders(recipe: Recipe) -> tuple[list[str], list[str]]:
     warnings: list[str] = []
 
     if recipe.iso.architecture == "arm64":
-        if "syslinux" in loaders:
-            loaders.remove("syslinux")
-            warnings.append("arm64 では syslinux が使えないので除外しました。")
+        # syslinux / grub-pc / grub-legacy は x86 用。arm64 では grub-efi
+        # しか使えないので、指定されていても落とす。
+        x86_loaders = {"syslinux", "grub-pc", "grub-legacy"}
+        if any(loader in x86_loaders for loader in loaders):
+            warnings.append(
+                "arm64 では x86 用のブートローダ "
+                "(syslinux/grub-pc/grub-legacy) を除外しました。"
+            )
+        loaders = [loader for loader in loaders if loader not in x86_loaders]
         if "grub-efi" not in loaders:
             loaders.append("grub-efi")
-            warnings.append("arm64 では grub-efi を追加しました。")
+            warnings.append("arm64 では grub-efi を使います。")
 
     # 386 系は BIOS ブートも要るので syslinux を残す
     if not loaders:
@@ -277,12 +286,14 @@ def _effective_bootloaders(recipe: Recipe) -> tuple[list[str], list[str]]:
 def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
     """`lb config` に渡す引数を組み立てる。戻り値は (引数, 警告)。"""
     spellings = probe_option_spellings()
+    spellings.missing.clear()
     args: list[str] = []
     warnings: list[str] = []
 
     def emit(key: str, *values: str) -> None:
         flag = spellings.get(key)
         if flag is None:
+            spellings.missing.append(key)
             warnings.append(
                 f"この live-build は {OPTION_ALIASES[key][0]} に対応していないため、"
                 f"{key} の設定は反映されません。"
@@ -324,7 +335,10 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
     emit("iso_publisher", recipe.iso.resolved_publisher())
     emit("iso_preparer", recipe.iso.resolved_preparer())
     emit("image_name", recipe.iso.name)
-    emit("memtest", "true" if recipe.build.memtest else "false")
+    # live-build の --memtest は真偽値ではなく、どの memtest を入れるかの
+    # 列挙値 (memtest86+ / memtest86 / none) を取る。true を渡すと
+    # lb config が「不正な値」として終了してしまう。
+    emit("memtest", "memtest86+" if recipe.build.memtest else "none")
     emit("utc_time", "true" if recipe.system.utc else "false")
     emit("bootappend_live", build_bootappend(recipe))
     emit("bootappend_live_failsafe", build_failsafe_append(recipe))
@@ -510,10 +524,11 @@ def _auto_config(recipe: Recipe) -> str:
     ]
     # argv は ["lb", "config", "noauto", ...] なので、2 番目 (noauto) から出す。
     for index in range(2, len(argv)):
-        item = argv[index]
-        suffix = " \\" if index < len(argv) - 1 else ""
-        lines.append(f"\t{shlex.quote(item)}{suffix}")
-    lines.append('"${@}"')
+        lines.append(f"\t{shlex.quote(argv[index])} \\")
+    # ${@} は lb config と同じコマンドの引数として渡す。単独行にすると、
+    # live-build が `lb config -- ...` で渡してくる追加オプションを
+    # シェルがコマンド名として実行してしまう。
+    lines.append('\t"${@}"')
     lines.append("")
     return "\n".join(lines)
 
@@ -893,22 +908,22 @@ def _hook_permissions(recipe: Recipe) -> str:
     """
     entries: list[tuple[str, str, str]] = []
     for entry in recipe.files.copy:
-        if entry.mode or entry.Keychrom:
-            entries.append((entry.target, entry.mode, entry.Keychrom))
+        if entry.mode or entry.owner:
+            entries.append((entry.target, entry.mode, entry.owner))
     for entry in recipe.files.write:
-        if entry.mode or entry.Keychrom:
-            entries.append((entry.path, entry.mode, entry.Keychrom))
+        if entry.mode or entry.owner:
+            entries.append((entry.path, entry.mode, entry.owner))
     if not entries:
         return ""
 
     lines = [_hook_header("パーミッション設定")]
-    for target, mode, Keychrom in entries:
+    for target, mode, owner in entries:
         quoted = shlex.quote(target)
         lines.append(f"if [ -e {quoted} ]; then")
         if mode:
             lines.append(f"    chmod {shlex.quote(mode)} {quoted} || true")
-        if Keychrom:
-            lines.append(f"    chown {shlex.quote(Keychrom)} {quoted} || true")
+        if owner:
+            lines.append(f"    chown {shlex.quote(owner)} {quoted} || true")
         lines.append("fi")
     lines.append("")
     return "\n".join(lines)
@@ -1084,7 +1099,9 @@ mkdir -p {shlex.quote(BOOT_LIB_DIR)}
 cat > {shlex.quote(BOOT_LIB_DIR + '/boot-setup.sh')} <<'BOOTSETUP_EOF'
 {_boot_setup_script(recipe)}
 BOOTSETUP_EOF
-chmod 0755 {shlex.quote(BOOT_LIB_DIR + '/boot-setup.sh')}
+# root のパスワードなどが入るので、ライブユーザーからは読めないようにする。
+# systemd は root で実行するため 0700 でも動く。
+chmod 0700 {shlex.quote(BOOT_LIB_DIR + '/boot-setup.sh')}
 
 cat > /etc/systemd/system/{BOOT_SERVICE_NAME} <<'UNIT_EOF'
 [Unit]

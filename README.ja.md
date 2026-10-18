@@ -64,7 +64,7 @@ UI は日本語と英語に対応しています。環境変数 `LANG` / `LC_ALL
 
 ```sh
 git clone https://github.com/Keychrom/Frosted-ISO-Builder
-cd frosted-iso-builder
+cd Frosted-ISO-Builder
 
 # 依存パッケージごと入れる場合 (推奨)
 sudo ./install.sh --with-deps
@@ -80,6 +80,9 @@ sudo apt install live-build debootstrap xorriso squashfs-tools cpio rsync \
     uuid-runtime mtools dosfstools syslinux-common isolinux \
     grub-efi-amd64-bin grub-pc-bin fakeroot gnupg
 ```
+
+arm64 では amd64/x86 用の GRUB パッケージの代わりに `grub-efi-arm64-bin` を
+入れてください。`./install.sh --with-deps` はホストに合うものを選びます。
 
 インストールせずに試すこともできます。
 
@@ -204,7 +207,7 @@ sudo frosted build examples/minimal.toml
 source = "./assets/motd"     # レシピからの相対パス
 target = "/etc/motd"         # イメージ内の絶対パス
 mode = "0644"                # 省略可
-Keychrom = "root:root"          # 省略可
+owner = "root:root"             # 省略可 (旧名: Keychrom)
 
 # 中身を直接書いてイメージに入れる
 [[files.write]]
@@ -359,7 +362,7 @@ sudo frosted build release.toml --sign you@example.com
 frosted verify mylinux-1.0-amd64.iso
 ```
 
-`verify` はチェックサム・署名・ビルド情報をまとめて確認して、結果を
+`verify` はチェックサムと署名を確認し、ビルド情報を表示します。結果は
 分かりやすく表示します。`sha256sum -c SHA256SUMS` や
 `gpg --verify` を直接使っても構いません。
 
@@ -513,7 +516,7 @@ sudo dd if=mylinux-1.0-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
 
 ```sh
 git clone https://github.com/Keychrom/Frosted-ISO-Builder
-cd frosted-iso-builder
+cd Frosted-ISO-Builder
 
 # テスト (標準ライブラリの unittest のみ)
 python3 -m unittest discover -s tests -t . -v
@@ -556,7 +559,7 @@ python3 bin/frosted --help
 
 正直に書いておきます。
 
-**検証済み (自動テスト 148 件 + CI)**
+**検証済み (自動テスト一式 + CI)**
 
 - レシピの読み書き・検証 (誤った入力の検出、TOML の往復)
 - live-build ツリーの生成内容
