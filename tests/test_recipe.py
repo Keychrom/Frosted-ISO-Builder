@@ -248,6 +248,168 @@ class RecipeValidationTest(unittest.TestCase):
             ),
         )
 
+    def test_bad_initsystem_and_initramfs_are_rejected(self) -> None:
+        for key, value in (
+            ("initsystem", "upstart"),
+            ("initramfs", "dracut"),
+        ):
+            with self.subTest(key=key):
+                self.assertIn(
+                    f"build.{key}",
+                    self._errors(
+                        {
+                            "version": 1,
+                            "iso": {"name": "x"},
+                            "build": {key: value},
+                        }
+                    ),
+                )
+
+    def test_swap_file_requires_absolute_path(self) -> None:
+        self.assertIn(
+            "binary.swap_file_path",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "binary": {"swap_file_path": "swapfile"},
+                }
+            ),
+        )
+        self.assertIn(
+            "binary.swap_file_path",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "binary": {"swap_file_path": "/tmp/../swapfile"},
+                }
+            ),
+        )
+        self.assertIn(
+            "binary.swap_file_path",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "binary": {"swap_file_path": "/swap/"},
+                }
+            ),
+        )
+        self.assertIn(
+            "binary.swap_file_path",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "binary": {"swap_file_path": "/"},
+                }
+            ),
+        )
+        self.assertIn(
+            "binary.swap_file_size",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "binary": {"swap_file_path": "/swapfile", "swap_file_size": 0},
+                }
+            ),
+        )
+
+    def test_swap_size_without_path_is_a_warning(self) -> None:
+        recipe = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x"},
+                "binary": {"swap_file_size": 1024},
+            }
+        )
+        self.assertTrue(
+            any(issue.where == "binary.swap_file_size" for issue in recipe.warnings)
+        )
+
+    def test_boot_install_append_rejects_quotes(self) -> None:
+        self.assertIn(
+            "boot.install_append",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "boot": {"install_append": 'quiet "oops"'},
+                }
+            ),
+        )
+
+    def test_local_package_with_wrong_suffix_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            deb = Path(tmp) / "hello_1.0_noarch.deb"
+            deb.write_bytes(b"deb")
+            self.assertIn(
+                "packages.local",
+                self._errors(
+                    {
+                        "version": 1,
+                        "iso": {"name": "x"},
+                        "packages": {"local": [str(deb)]},
+                    }
+                ),
+            )
+
+    def test_local_package_for_another_architecture_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            deb = Path(tmp) / "hello_1.0_i386.deb"
+            deb.write_bytes(b"deb")
+            self.assertIn(
+                "packages.local",
+                self._errors(
+                    {
+                        "version": 1,
+                        "iso": {"name": "x", "architecture": "amd64"},
+                        "packages": {"local": [str(deb)]},
+                    }
+                ),
+            )
+
+    def test_duplicate_local_package_names_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            one = Path(tmp) / "one"
+            two = Path(tmp) / "two"
+            one.mkdir()
+            two.mkdir()
+            for directory in (one, two):
+                (directory / "hello_1.0_amd64.deb").write_bytes(b"deb")
+            self.assertIn(
+                "packages.local",
+                self._errors(
+                    {
+                        "version": 1,
+                        "iso": {"name": "x"},
+                        "packages": {
+                            "local": [
+                                str(one / "hello_1.0_amd64.deb"),
+                                str(two / "hello_1.0_amd64.deb"),
+                            ]
+                        },
+                    }
+                ),
+            )
+
+    def test_missing_local_package_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIn(
+                "packages.local",
+                self._errors(
+                    {
+                        "version": 1,
+                        "iso": {"name": "x"},
+                        "packages": {
+                            "local": [str(Path(tmp) / "missing_1.0_amd64.deb")]
+                        },
+                    }
+                ),
+            )
+
     def test_bad_kernel_flavour_is_rejected(self) -> None:
         self.assertIn(
             "kernel.flavours",
@@ -475,6 +637,9 @@ class TomlRoundTripTest(unittest.TestCase):
                     "options": "--no-install-recommends",
                     "pipeline": 2,
                     "keyring_packages": ["debian-archive-keyring"],
+                    "preferences": (
+                        "Package: *\nPin: release a=trixie\nPin-Priority: 100"
+                    ),
                 },
                 "installer": {
                     "type": "live",
@@ -485,6 +650,18 @@ class TomlRoundTripTest(unittest.TestCase):
                     "packages": "linux-image",
                     "flavours": ["amd64"],
                 },
+                "boot": {
+                    "install_append": "quiet splash",
+                },
+                "build": {
+                    "firmware_binary": True,
+                    "initsystem": "sysvinit",
+                    "initramfs": "none",
+                    "extra_repositories": [
+                        "deb https://repo.example.com/debian trixie main"
+                    ],
+                    "repositories_in_image": True,
+                },
             }
         )
         loaded = self._roundtrip(original)
@@ -492,11 +669,21 @@ class TomlRoundTripTest(unittest.TestCase):
         self.assertFalse(loaded.apt.secure)
         self.assertEqual(loaded.apt.pipeline, 2)
         self.assertEqual(loaded.apt.keyring_packages, ["debian-archive-keyring"])
+        self.assertIn("Pin-Priority: 100", loaded.apt.preferences)
         self.assertEqual(loaded.installer.type, "live")
         self.assertFalse(loaded.installer.gui)
         self.assertEqual(loaded.installer.distribution, "trixie")
         self.assertEqual(loaded.kernel.packages, "linux-image")
         self.assertEqual(loaded.kernel.flavours, ["amd64"])
+        self.assertEqual(loaded.boot.install_append, "quiet splash")
+        self.assertTrue(loaded.build.firmware_binary)
+        self.assertEqual(loaded.build.initsystem, "sysvinit")
+        self.assertEqual(loaded.build.initramfs, "none")
+        self.assertEqual(
+            loaded.build.extra_repositories,
+            ["deb https://repo.example.com/debian trixie main"],
+        )
+        self.assertTrue(loaded.build.repositories_in_image)
 
     def test_binary_roundtrip(self) -> None:
         original = Recipe.from_dict(
@@ -513,6 +700,8 @@ class TomlRoundTripTest(unittest.TestCase):
                     "initramfs_compression": "lzma",
                     "zsync": True,
                     "win32_loader": False,
+                    "swap_file_path": "/swapfile",
+                    "swap_file_size": 1024,
                 },
             }
         )
@@ -525,6 +714,22 @@ class TomlRoundTripTest(unittest.TestCase):
         self.assertEqual(loaded.binary.initramfs_compression, "lzma")
         self.assertTrue(loaded.binary.zsync)
         self.assertFalse(loaded.binary.win32_loader)
+        self.assertEqual(loaded.binary.swap_file_path, "/swapfile")
+        self.assertEqual(loaded.binary.swap_file_size, 1024)
+
+    def test_local_package_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            deb = Path(tmp) / "hello_1.0_amd64.deb"
+            deb.write_bytes(b"deb")
+            original = Recipe.from_dict(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "packages": {"local": [str(deb)]},
+                }
+            )
+            loaded = self._roundtrip(original)
+        self.assertEqual(loaded.packages.local, [str(deb)])
 
     def test_wallpaper_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

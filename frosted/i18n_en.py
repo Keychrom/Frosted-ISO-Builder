@@ -361,7 +361,12 @@ EN: dict[str, str] = {
     "  追加: {packages}": "  Add: {packages}",
     "  追加: {line}": "  Add: {line}",
     "  鍵: {path}": "  Key: {path}",
+    "  同梱: {path}": "  Bundle: {path}",
     "  壁紙 {path}": "  Wallpaper {path}",
+    "  インストール先: {params}": "  Installed system: {params}",
+    "  APT のピン留め: 設定あり": "  APT pinning: configured",
+    "スワップファイル": "Swap file",
+    "  {path} ({size} MB)": "  {path} ({size} MB)",
     "リポジトリ": "Repositories",
     "  除外: {packages}": "  Remove: {packages}",
     "  コピー  {source} -> {target}": "  copy    {source} -> {target}",
@@ -622,6 +627,33 @@ EN: dict[str, str] = {
     "インストーラーが none のため、preseed は使われません。": (
         "The installer type is none, so the preseed file is not used."
     ),
+    "インストーラーが none のため、install_append は使われません。": (
+        "The installer type is none, so install_append is not used."
+    ),
+    "インストーラーが none のため、firmware_binary は使われません。": (
+        "The installer type is none, so firmware_binary is not used."
+    ),
+    "swap_file_path が未設定なので、サイズは使われません。": (
+        "swap_file_path is not set, so the size is not used."
+    ),
+    '例: swap_file_path = "/swapfile"': 'Example: swap_file_path = "/swapfile"',
+    "1 以上 (MB) で指定してください。": "Specify 1 or greater (MB).",
+    "イメージ内の絶対パスで書いてください。": (
+        "Use an absolute path inside the image."
+    ),
+    ".. は使えません。": ".. is not allowed.",
+    "空白や引用符は使えません。": "Spaces and quotes are not allowed.",
+    "ファイル名まで含めてください。": "Include a file name.",
+    "空白や引用符を含まない .deb にしてください。": (
+        "Use a .deb file name without spaces or quotes."
+    ),
+    "dpkg-deb が作る元のファイル名のまま置いてください。": (
+        "Keep the original file name produced by dpkg-deb."
+    ),
+    "config/packages.chroot/ に同じ名前で置かれるためです。": (
+        "They are placed in config/packages.chroot/ with the same name."
+    ),
+    "NUL 文字は使えません。": "NUL characters are not allowed.",
     "デスクトップ環境が none のため、壁紙は設定されません。": (
         "The desktop environment is none, so the wallpaper is not applied."
     ),
@@ -784,9 +816,11 @@ EN: dict[str, str] = {
     '| どこ | 何が入っているか |': '| Path | What is in it |',
     '| `auto/config` | `lb config` に渡す全オプション。ここが実質の設定本体 |': '| `auto/config` | Every option passed to `lb config`. The real settings live here |',
     '| `config/package-lists/` | 入れるパッケージ (番号順に読み込まれる) |': '| `config/package-lists/` | Packages to install (read in numeric order) |',
+    '| `config/packages.chroot/` | 同梱するローカル .deb (依存関係ごと導入される) |': '| `config/packages.chroot/` | Local .deb files to bundle (installed with dependencies) |',
     '| `config/includes.chroot/` | イメージにそのまま入れるファイル |': '| `config/includes.chroot/` | Files copied into the image as-is |',
     '| `config/hooks/live/` | ビルド中に chroot 内で走るスクリプト。番号順 |': '| `config/hooks/live/` | Scripts run inside the chroot during the build, in numeric order |',
     '| `config/archives/` | 追加の APT リポジトリ |': '| `config/archives/` | Extra APT repositories |',
+    '| `config/archives/frosted.pref` | APT のピン留め |': '| `config/archives/frosted.pref` | APT pinning |',
     '| `.frosted-manifest.json` | このツールが生成したファイルの一覧 (掃除に使う) |': '| `.frosted-manifest.json` | List of files frosted generated (used for cleanup) |',
     '## ブートパラメータ': '## Boot parameters',
     'failsafe エントリ:': 'failsafe entry:',
@@ -965,6 +999,34 @@ PREFIXES: dict[str, str] = {
 
 #: 数値やパスが混ざるなど、前置き方式で拾えない文。上から順に試す。
 PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"^未対応の init システムです: (?P<value>.+)$"),
+        r"Unsupported init system: \g<value>",
+    ),
+    (
+        re.compile(r"^未対応の initramfs です: (?P<value>.+)$"),
+        r"Unsupported initramfs: \g<value>",
+    ),
+    (
+        re.compile(r"^パッケージが見つかりません: (?P<path>.+)$"),
+        r"Package not found: \g<path>",
+    ),
+    (
+        re.compile(
+            r"^パッケージのファイル名が _all\.deb でも "
+            r"_(?P<arch>.+?)\.deb でもありません: (?P<name>.+)$"
+        ),
+        r"The package file name is neither _all.deb nor "
+        r"_\g<arch>.deb: \g<name>",
+    ),
+    (
+        re.compile(r"^ファイル名に使えない文字があります: (?P<name>.+)$"),
+        r"The file name contains unsupported characters: \g<name>",
+    ),
+    (
+        re.compile(r"^同じ名前のパッケージが複数あります: (?P<name>.+)$"),
+        r"Multiple packages have the same name: \g<name>",
+    ),
     (
         re.compile(r"^# X セッション: (?P<session>.+) \(ブートパラメータで指定済み\)$"),
         r"# X session: \g<session> (set via boot parameter)",

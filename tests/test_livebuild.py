@@ -883,6 +883,8 @@ class AdvancedSettingsTest(unittest.TestCase):
         recipe.binary.initramfs_compression = "gzip"
         recipe.binary.zsync = True
         recipe.binary.win32_loader = True
+        recipe.binary.swap_file_path = "/swapfile"
+        recipe.binary.swap_file_size = 1024
 
         argv, _ = build_lb_argv(recipe)
         expected = {
@@ -895,10 +897,100 @@ class AdvancedSettingsTest(unittest.TestCase):
             "--initramfs-compression": "gzip",
             "--zsync": "true",
             "--win32-loader": "true",
+            "--swap-file-path": "/swapfile",
+            "--swap-file-size": "1024",
         }
         for flag, value in expected.items():
             with self.subTest(flag=flag):
                 self.assertEqual(argv[argv.index(flag) + 1], value)
+
+    def test_boot_build_and_installer_options_reach_lb(self) -> None:
+        recipe = _basic_recipe()
+        recipe.boot.install_append = "quiet splash"
+        recipe.build.initsystem = "sysvinit"
+        recipe.build.initramfs = "none"
+        recipe.build.firmware_binary = True
+
+        argv, _ = build_lb_argv(recipe)
+        expected = {
+            "--bootappend-install": "quiet splash",
+            "--initsystem": "sysvinit",
+            "--initramfs": "none",
+            "--firmware-binary": "true",
+        }
+        for flag, value in expected.items():
+            with self.subTest(flag=flag):
+                self.assertEqual(argv[argv.index(flag) + 1], value)
+
+    def test_defaults_still_match_live_build(self) -> None:
+        recipe = _basic_recipe()
+        argv, _ = build_lb_argv(recipe)
+        self.assertEqual(argv[argv.index("--initsystem") + 1], "systemd")
+        self.assertEqual(argv[argv.index("--initramfs") + 1], "live-boot")
+        self.assertEqual(argv[argv.index("--firmware-binary") + 1], "false")
+        self.assertNotIn("--swap-file-path", argv)
+        self.assertNotIn("--bootappend-install", argv)
+
+    def test_local_packages_are_copied_for_live_build(self) -> None:
+        recipe = _basic_recipe()
+        with Project(recipe) as project:
+            (project.root / "hello_1.0_amd64.deb").write_bytes(b"deb")
+            (project.root / "theme_1.0_all.deb").write_bytes(b"deb-all")
+            recipe.packages.local = [
+                "hello_1.0_amd64.deb",
+                "theme_1.0_all.deb",
+            ]
+
+            project.generate()
+            root = project.workdir() / "config" / "packages.chroot"
+            self.assertEqual(
+                (root / "hello_1.0_amd64.deb").read_bytes(), b"deb"
+            )
+            self.assertEqual(
+                (root / "theme_1.0_all.deb").read_bytes(), b"deb-all"
+            )
+
+    def test_apt_preferences_are_written_verbatim(self) -> None:
+        recipe = _basic_recipe()
+        preferences = (
+            "Package: *\n"
+            "Pin: release a=trixie\n"
+            "Pin-Priority: 100\n"
+        )
+        recipe.apt.preferences = preferences
+        with Project(recipe) as project:
+            project.generate()
+            target = project.workdir() / "config" / "archives" / "frosted.pref"
+            text = target.read_text(encoding="utf-8")
+        self.assertIn(preferences.strip(), text)
+        self.assertIn("Pin-Priority: 100", text)
+
+    def test_extra_repositories_are_build_only_by_default(self) -> None:
+        recipe = _basic_recipe()
+        recipe.build.extra_repositories = [
+            "deb https://repo.example.com/debian trixie main"
+        ]
+        with Project(recipe) as project:
+            project.generate()
+            root = project.workdir() / "config" / "archives"
+            self.assertTrue((root / "extra.list.chroot").is_file())
+            self.assertFalse((root / "extra.list").exists())
+
+    def test_extra_repositories_can_stay_in_the_image(self) -> None:
+        recipe = _basic_recipe()
+        recipe.build.extra_repositories = [
+            "deb https://repo.example.com/debian trixie main"
+        ]
+        recipe.build.repositories_in_image = True
+        with Project(recipe) as project:
+            project.generate()
+            root = project.workdir() / "config" / "archives"
+            self.assertTrue((root / "extra.list").is_file())
+            self.assertFalse((root / "extra.list.chroot").exists())
+            self.assertIn(
+                "repo.example.com",
+                (root / "extra.list").read_text(encoding="utf-8"),
+            )
 
     def test_no_squashfs_skips_squashfs_options(self) -> None:
         recipe = _basic_recipe()

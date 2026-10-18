@@ -634,6 +634,8 @@ def cmd_show(args) -> int:
     ui.out()
     ui.out(ui.dim("  failsafe:"))
     ui.out(f"  {build_failsafe_append(recipe)}")
+    if recipe.boot.install_append:
+        ui.out(ui.dim(t("  インストール先: {params}", params=recipe.boot.install_append)))
 
     ui.step("lb config に渡す引数")
     argv, warnings = build_lb_argv(recipe)
@@ -642,12 +644,14 @@ def cmd_show(args) -> int:
     for item in argv:
         ui.out(f"  {item}")
 
-    if recipe.packages.include or recipe.packages.exclude:
+    if recipe.packages.include or recipe.packages.exclude or recipe.packages.local:
         ui.step("パッケージ")
         if recipe.packages.include:
             ui.out(t("  追加: {packages}", packages=" ".join(recipe.packages.include)))
         if recipe.packages.exclude:
             ui.out(t("  除外: {packages}", packages=" ".join(recipe.packages.exclude)))
+        for deb in recipe.packages.local:
+            ui.out(t("  同梱: {path}", path=deb))
 
     if recipe.files.copy or recipe.files.write:
         ui.step("ファイル")
@@ -666,6 +670,19 @@ def cmd_show(args) -> int:
             ui.out(t("  追加: {line}", line=line))
         for key in recipe.build.repository_keys:
             ui.out(t("  鍵: {path}", path=key))
+        if recipe.apt.preferences.strip():
+            ui.out(t("  APT のピン留め: 設定あり"))
+
+    if recipe.binary.swap_file_path:
+        ui.step("スワップファイル")
+        size = recipe.binary.swap_file_size or 512
+        ui.out(
+            t(
+                "  {path} ({size} MB)",
+                path=recipe.binary.swap_file_path,
+                size=size,
+            )
+        )
 
     if recipe.scripts.setup or recipe.scripts.firstboot:
         ui.step("スクリプト")

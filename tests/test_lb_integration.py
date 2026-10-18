@@ -265,11 +265,17 @@ def _fully_loaded_recipe() -> Recipe:
     recipe.apt.options = "--no-install-recommends"
     recipe.apt.pipeline = 1
     recipe.apt.keyring_packages = ["debian-archive-keyring"]
+    recipe.apt.preferences = "Package: *\nPin: release a=trixie\nPin-Priority: 100"
+    recipe.build.extra_repositories = [
+        "deb https://repo.example.com/debian trixie main"
+    ]
+    recipe.build.repositories_in_image = True
     recipe.installer.type = "live"
     recipe.installer.gui = False
     recipe.installer.distribution = "trixie"
     recipe.kernel.packages = "linux-image"
     recipe.kernel.flavours = ["amd64"]
+    recipe.boot.install_append = "quiet splash"
     recipe.binary.filesystem = "fat32"
     recipe.binary.chroot_filesystem = "squashfs"
     recipe.binary.squashfs_compression = "zstd"
@@ -277,8 +283,13 @@ def _fully_loaded_recipe() -> Recipe:
     recipe.binary.initramfs_compression = "gzip"
     recipe.binary.zsync = False
     recipe.binary.win32_loader = False
+    recipe.binary.swap_file_path = "/swapfile"
+    recipe.binary.swap_file_size = 256
     recipe.build.debconf_frontend = "noninteractive"
     recipe.build.debconf_priority = "critical"
+    recipe.build.firmware_binary = True
+    recipe.build.initsystem = "systemd"
+    recipe.build.initramfs = "live-boot"
     return recipe
 
 

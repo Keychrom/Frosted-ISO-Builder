@@ -51,6 +51,8 @@ KNOWN_SQUASHFS_COMPRESSION = ("gzip", "lzma", "lzo", "lz4", "xz", "zstd")
 KNOWN_INITRAMFS_COMPRESSION = ("bzip2", "gzip", "lzma")
 KNOWN_DEBCONF_FRONTENDS = ("dialog", "editor", "noninteractive", "readline")
 KNOWN_DEBCONF_PRIORITIES = ("low", "medium", "high", "critical")
+KNOWN_INITSYSTEMS = ("systemd", "sysvinit", "none")
+KNOWN_INITRAMFS = ("live-boot", "none")
 
 DEFAULT_MIRROR = "http://deb.debian.org/debian/"
 DEFAULT_SECURITY_MIRROR = "http://security.debian.org/debian-security/"
@@ -73,6 +75,9 @@ RE_TIMEZONE = re.compile(r"^(UTC|[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z][A-Za-z0-9_+-]
 RE_MIRROR = re.compile(r"^(https?|ftp|file)://")
 RE_MODE = re.compile(r"^0?[0-7]{3,4}$")
 RE_KEYRING_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+#: live-build が config/packages.chroot/ から拾う .deb のファイル名。
+#: 空白やシェルのメタ文字が入ると glob 展開が壊れるので許可しない。
+RE_DEB_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+._~:-]*\.deb$")
 
 #: 壁紙として受け付ける拡張子。デスクトップ側の画像ローダに任せる。
 WALLPAPER_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".svg")
@@ -209,6 +214,9 @@ class DesktopSection:
 class PackagesSection:
     include: list[str] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
+    #: ホスト上の .deb。live-build が config/packages.chroot/ から
+    #: ローカルリポジトリを作って導入する。
+    local: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -257,6 +265,9 @@ class ScriptsSection:
 class BootSection:
     #: bootappend-live にそのまま足す追加パラメータ
     append: str = ""
+    #: bootappend-install に足すパラメータ。インストーラーで導入した
+    #: システムのカーネルコマンドラインに入る。
+    install_append: str = ""
     persistence: bool = False
     #: failsafe メニューの自動ログインを無効にするか
     failsafe_noautologin: bool = True
@@ -265,7 +276,7 @@ class BootSection:
 @dataclass
 class BinarySection:
     image_type: str = "iso-hybrid"
-    #: hdd/netboot 用のファイルシステム。空なら live-build の既定値。
+    #: --binary-filesystem (hdd イメージ用)
     filesystem: str = ""
     checksums: str = "sha256"
     chroot_filesystem: str = ""
@@ -274,6 +285,10 @@ class BinarySection:
     initramfs_compression: str = ""
     zsync: bool | None = None
     win32_loader: bool | None = None
+    #: イメージ内に作るスワップファイル。少ない RAM の実機向け。
+    swap_file_path: str = ""
+    #: スワップファイルの大きさ (MB)。live-build の既定は 512。
+    swap_file_size: int | None = None
 
 
 @dataclass
@@ -287,6 +302,9 @@ class AptSection:
     options: str = ""
     pipeline: int | None = None
     keyring_packages: list[str] = field(default_factory=list)
+    #: APT のピン留め (config/apt/frosted.pref に書く)。
+    #: 複数リポジトリを混ぜるときの優先度指定に使う。
+    preferences: str = ""
 
 
 @dataclass
@@ -328,6 +346,9 @@ class BuildSection:
     debootstrap_options: str = ""
     #: 追加の APT リポジトリ (例: 独自リポジトリや backports)
     extra_repositories: list[str] = field(default_factory=list)
+    #: 追加リポジトリを完成イメージの sources.list にも残すか。
+    #: false ならパッケージ導入時だけ使う。
+    repositories_in_image: bool = False
     #: extra_repositories で使う GPG 鍵 (ホスト上のパス)。
     #: /usr/share/keyrings/<ファイル名> にコピーされる。
     repository_keys: list[str] = field(default_factory=list)
@@ -339,6 +360,13 @@ class BuildSection:
     source: bool | None = None
     debconf_frontend: str = ""
     debconf_priority: str = ""
+    #: インストーラー (d-i) 側に入れるファームウェア。
+    #: 空 (None) は live-build の既定 (false) を使う。
+    firmware_binary: bool | None = None
+    #: 初期化システム。空なら systemd。
+    initsystem: str = ""
+    #: live 用 initramfs。空なら live-boot。
+    initramfs: str = ""
 
 
 # --------------------------------------------------------------------------
@@ -559,6 +587,7 @@ class Recipe:
             {
                 "include": list(self.packages.include),
                 "exclude": list(self.packages.exclude),
+                "local": list(self.packages.local),
             }
         )
         if packages:
@@ -615,6 +644,7 @@ class Recipe:
         data["boot"] = _clean(
             {
                 "append": self.boot.append,
+                "install_append": self.boot.install_append,
                 "persistence": self.boot.persistence,
                 "failsafe_noautologin": self.boot.failsafe_noautologin,
             }
@@ -629,6 +659,7 @@ class Recipe:
                 "options": self.apt.options,
                 "pipeline": self.apt.pipeline,
                 "keyring_packages": list(self.apt.keyring_packages),
+                "preferences": self.apt.preferences,
             }
         )
         if apt:
@@ -674,6 +705,8 @@ class Recipe:
                 "initramfs_compression": self.binary.initramfs_compression,
                 "zsync": self.binary.zsync,
                 "win32_loader": self.binary.win32_loader,
+                "swap_file_path": self.binary.swap_file_path,
+                "swap_file_size": self.binary.swap_file_size,
             }
         )
         if binary:
@@ -696,6 +729,7 @@ class Recipe:
                 "debootstrap_options": self.build.debootstrap_options,
                 "extra_repositories": list(self.build.extra_repositories),
                 "repository_keys": list(self.build.repository_keys),
+                "repositories_in_image": self.build.repositories_in_image,
                 "updates": self.build.updates,
                 "backports": self.build.backports,
                 "proposed_updates": self.build.proposed_updates,
@@ -703,6 +737,9 @@ class Recipe:
                 "source": self.build.source,
                 "debconf_frontend": self.build.debconf_frontend,
                 "debconf_priority": self.build.debconf_priority,
+                "firmware_binary": self.build.firmware_binary,
+                "initsystem": self.build.initsystem,
+                "initramfs": self.build.initramfs,
             }
         )
 
@@ -1119,11 +1156,12 @@ def _desktop_from(data: dict[str, Any], issues: list[Issue]) -> DesktopSection:
 
 
 def _packages_from(data: dict[str, Any], issues: list[Issue]) -> PackagesSection:
-    known = {"include", "exclude"}
+    known = {"include", "exclude", "local"}
     _reject_unknown(data, known, "packages", issues)
     section = PackagesSection(
         include=_list_value(data, "include", "packages", issues),
         exclude=_list_value(data, "exclude", "packages", issues),
+        local=_list_value(data, "local", "packages", issues),
     )
     for key, names in (("include", section.include), ("exclude", section.exclude)):
         for name in names:
@@ -1306,10 +1344,11 @@ def _scripts_from(data: dict[str, Any], issues: list[Issue]) -> ScriptsSection:
 
 
 def _boot_from(data: dict[str, Any], issues: list[Issue]) -> BootSection:
-    known = {"append", "persistence", "failsafe_noautologin"}
+    known = {"append", "install_append", "persistence", "failsafe_noautologin"}
     _reject_unknown(data, known, "boot", issues)
     section = BootSection(
         append=_str_value(data, "append", "", "boot", issues),
+        install_append=_str_value(data, "install_append", "", "boot", issues),
         persistence=_bool_value(data, "persistence", False, "boot", issues),
         failsafe_noautologin=_bool_value(
             data, "failsafe_noautologin", True, "boot", issues
@@ -1317,16 +1356,20 @@ def _boot_from(data: dict[str, Any], issues: list[Issue]) -> BootSection:
     )
     # 追加パラメータはカーネルコマンドラインにそのまま載る。
     # 引用符やバックスラッシュが混じるとパラメータの切れ目が壊れて起動しなくなる。
-    bad = sorted(set(section.append) & set("\"'\\\n\r\t"))
-    if bad:
-        issues.append(
-            Issue(
-                "error",
-                "boot.append",
-                f"使えない文字が入っています: {' '.join(repr(c) for c in bad)}",
-                hint="引用符やバックスラッシュは使えません。例: quiet splash toram",
+    for key, value in (
+        ("append", section.append),
+        ("install_append", section.install_append),
+    ):
+        bad = sorted(set(value) & set("\"'\\\n\r\t"))
+        if bad:
+            issues.append(
+                Issue(
+                    "error",
+                    f"boot.{key}",
+                    f"使えない文字が入っています: {' '.join(repr(c) for c in bad)}",
+                    hint="引用符やバックスラッシュは使えません。例: quiet splash toram",
+                )
             )
-        )
     return section
 
 
@@ -1347,6 +1390,7 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         "debootstrap_options",
         "extra_repositories",
         "repository_keys",
+        "repositories_in_image",
         "updates",
         "backports",
         "proposed_updates",
@@ -1354,6 +1398,9 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         "source",
         "debconf_frontend",
         "debconf_priority",
+        "firmware_binary",
+        "initsystem",
+        "initramfs",
     }
     _reject_unknown(data, known, "build", issues)
     section = BuildSection(
@@ -1382,6 +1429,9 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         repository_keys=_list_value(
             data, "repository_keys", "build", issues
         ),
+        repositories_in_image=_bool_value(
+            data, "repositories_in_image", False, "build", issues
+        ),
         updates=_optional_bool_value(data, "updates", "build", issues),
         backports=_optional_bool_value(data, "backports", "build", issues),
         proposed_updates=_optional_bool_value(
@@ -1395,6 +1445,11 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         debconf_priority=_str_value(
             data, "debconf_priority", "", "build", issues
         ),
+        firmware_binary=_optional_bool_value(
+            data, "firmware_binary", "build", issues
+        ),
+        initsystem=_str_value(data, "initsystem", "", "build", issues),
+        initramfs=_str_value(data, "initramfs", "", "build", issues),
     )
     if not section.workdir.strip() or "\n" in section.workdir or "\r" in section.workdir:
         issues.append(
@@ -1493,6 +1548,24 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
                 hint="例: http://192.168.1.10:3142",
             )
         )
+    if section.initsystem and section.initsystem not in KNOWN_INITSYSTEMS:
+        issues.append(
+            Issue(
+                "error",
+                "build.initsystem",
+                f"未対応の init システムです: {section.initsystem!r}",
+                hint=f"対応: {', '.join(KNOWN_INITSYSTEMS)}",
+            )
+        )
+    if section.initramfs and section.initramfs not in KNOWN_INITRAMFS:
+        issues.append(
+            Issue(
+                "error",
+                "build.initramfs",
+                f"未対応の initramfs です: {section.initramfs!r}",
+                hint=f"対応: {', '.join(KNOWN_INITRAMFS)}",
+            )
+        )
     return section
 
 
@@ -1510,6 +1583,7 @@ def _apt_from(data: dict[str, Any], issues: list[Issue]) -> AptSection:
         "options",
         "pipeline",
         "keyring_packages",
+        "preferences",
     }
     _reject_unknown(data, known, "apt", issues)
     section = AptSection(
@@ -1524,7 +1598,20 @@ def _apt_from(data: dict[str, Any], issues: list[Issue]) -> AptSection:
         keyring_packages=_list_value(
             data, "keyring_packages", "apt", issues
         ),
+        preferences=_str_value(data, "preferences", "", "apt", issues),
     )
+    # Windows で書いた複数行文字列を apt に渡すので、改行を LF に揃える。
+    section.preferences = section.preferences.replace("\r\n", "\n").replace(
+        "\r", "\n"
+    )
+    if "\x00" in section.preferences:
+        issues.append(
+            Issue(
+                "error",
+                "apt.preferences",
+                "NUL 文字は使えません。",
+            )
+        )
     if section.backend and section.backend not in KNOWN_APT_BACKENDS:
         issues.append(
             Issue(
@@ -1611,6 +1698,8 @@ def _binary_from(data: dict[str, Any], issues: list[Issue]) -> BinarySection:
         "initramfs_compression",
         "zsync",
         "win32_loader",
+        "swap_file_path",
+        "swap_file_size",
     }
     _reject_unknown(data, known, "binary", issues)
     section = BinarySection(
@@ -1631,6 +1720,12 @@ def _binary_from(data: dict[str, Any], issues: list[Issue]) -> BinarySection:
         ),
         zsync=_optional_bool_value(data, "zsync", "binary", issues),
         win32_loader=_optional_bool_value(data, "win32_loader", "binary", issues),
+        swap_file_path=_str_value(
+            data, "swap_file_path", "", "binary", issues
+        ),
+        swap_file_size=_optional_int_value(
+            data, "swap_file_size", "binary", issues
+        ),
     )
     checks = (
         ("image_type", section.image_type, KNOWN_BINARY_IMAGES),
@@ -1673,6 +1768,57 @@ def _binary_from(data: dict[str, Any], issues: list[Issue]) -> BinarySection:
                 "1 以上で指定してください。",
             )
         )
+    if section.swap_file_path:
+        path = section.swap_file_path
+        if not path.startswith("/"):
+            issues.append(
+                Issue(
+                    "error",
+                    "binary.swap_file_path",
+                    "イメージ内の絶対パスで書いてください。",
+                    hint="例: /swapfile",
+                )
+            )
+        elif ".." in Path(path).parts:
+            issues.append(
+                Issue("error", "binary.swap_file_path", ".. は使えません。")
+            )
+        elif path in ("/", "") or path.endswith("/"):
+            issues.append(
+                Issue(
+                    "error",
+                    "binary.swap_file_path",
+                    "ファイル名まで含めてください。",
+                    hint="例: /swapfile",
+                )
+            )
+        elif any(char in path for char in " \t\r\n\"'\\"):
+            issues.append(
+                Issue(
+                    "error",
+                    "binary.swap_file_path",
+                    "空白や引用符は使えません。",
+                    hint="例: /swapfile",
+                )
+            )
+    if section.swap_file_size is not None:
+        if section.swap_file_size < 1:
+            issues.append(
+                Issue(
+                    "error",
+                    "binary.swap_file_size",
+                    "1 以上 (MB) で指定してください。",
+                )
+            )
+        if not section.swap_file_path:
+            issues.append(
+                Issue(
+                    "warning",
+                    "binary.swap_file_size",
+                    "swap_file_path が未設定なので、サイズは使われません。",
+                    hint="例: swap_file_path = \"/swapfile\"",
+                )
+            )
     return section
 
 
@@ -1830,6 +1976,69 @@ def _validate_cross(recipe: Recipe, issues: list[Issue]) -> None:
                     "インストーラーが none のため、preseed は使われません。",
                 )
             )
+
+    if recipe.boot.install_append and recipe.installer.type == "none":
+        issues.append(
+            Issue(
+                "warning",
+                "boot.install_append",
+                "インストーラーが none のため、install_append は使われません。",
+            )
+        )
+    if recipe.build.firmware_binary and recipe.installer.type == "none":
+        issues.append(
+            Issue(
+                "warning",
+                "build.firmware_binary",
+                "インストーラーが none のため、firmware_binary は使われません。",
+            )
+        )
+
+    seen_deb_names: set[str] = set()
+    for deb_path in recipe.packages.local:
+        candidate = recipe.resolve(deb_path)
+        if not candidate.is_file():
+            issues.append(
+                Issue(
+                    "error",
+                    "packages.local",
+                    f"パッケージが見つかりません: {deb_path}",
+                    hint=f"探した場所: {candidate}",
+                )
+            )
+            continue
+        # live-build は *_all.deb と *_<アーキテクチャ>.deb しか拾わない。
+        # 名前が違うと「入れたつもりで入っていない」状態になるので止める。
+        suffixes = ("_all.deb", f"_{recipe.iso.architecture}.deb")
+        if not candidate.name.endswith(suffixes):
+            issues.append(
+                Issue(
+                    "error",
+                    "packages.local",
+                    f"パッケージのファイル名が _all.deb でも "
+                    f"_{recipe.iso.architecture}.deb でもありません: {candidate.name}",
+                    hint="dpkg-deb が作る元のファイル名のまま置いてください。",
+                )
+            )
+        if not RE_DEB_NAME.match(candidate.name):
+            issues.append(
+                Issue(
+                    "error",
+                    "packages.local",
+                    f"ファイル名に使えない文字があります: {candidate.name}",
+                    hint="空白や引用符を含まない .deb にしてください。",
+                )
+            )
+        if candidate.name in seen_deb_names:
+            issues.append(
+                Issue(
+                    "error",
+                    "packages.local",
+                    f"同じ名前のパッケージが複数あります: {candidate.name}",
+                    hint="config/packages.chroot/ に同じ名前で置かれるためです。",
+                )
+            )
+        seen_deb_names.add(candidate.name)
 
     if recipe.desktop.wallpaper:
         candidate = recipe.resolve(recipe.desktop.wallpaper)

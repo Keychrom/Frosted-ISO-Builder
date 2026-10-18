@@ -199,9 +199,26 @@ formats are PNG, JPEG, WebP and SVG.
 | --- | --- |
 | `include` | Packages to install |
 | `exclude` | Packages to remove explicitly |
+| `local` | Local `.deb` files on the host to bundle |
 
 `exclude` runs `apt-get remove` after installation. It does not follow
 dependencies, so only the packages you name are removed.
+
+`local` is for packages you build yourself. live-build builds a local
+repository from `config/packages.chroot/` and installs them with their
+dependencies.
+
+```toml
+[packages]
+local = [
+  "./debs/myapp_1.2.0_amd64.deb",
+  "./debs/myapp-data_1.2.0_all.deb",
+]
+```
+
+Keep the file names dpkg produces, ending in `_all.deb` or
+`_<architecture>.deb`. live-build does not pick up any other name, so
+validation rejects them.
 
 ### `[ssh]`
 
@@ -260,6 +277,7 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | Key | Default | Description |
 | --- | --- | --- |
 | `append` | empty | Extra kernel parameters, e.g. `quiet splash toram` |
+| `install_append` | empty | Kernel parameters for the system installed by the installer |
 | `persistence` | `false` | Enable persistence |
 | `failsafe_noautologin` | `true` | Turn off autologin in the failsafe menu entry |
 
@@ -282,6 +300,10 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | `debootstrap_options` | empty | Passed straight through to debootstrap |
 | `extra_repositories` | empty | Additional APT repositories (`deb ...` lines) |
 | `repository_keys` | empty | GPG keys for those repositories, installed for apt and copied to `/usr/share/keyrings/` |
+| `repositories_in_image` | `false` | Keep those repositories in the image's sources list |
+| `firmware_binary` | `false` | Include firmware in the installer as well |
+| `initsystem` | `systemd` | `systemd`, `sysvinit` or `none` |
+| `initramfs` | `live-boot` | `live-boot` or `none` |
 | `updates` | unset | Enable the updates suite |
 | `backports` | unset | Enable backports |
 | `proposed_updates` | unset | Enable proposed updates |
@@ -290,18 +312,25 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | `debconf_frontend` | unset | `dialog`, `editor`, `noninteractive` or `readline` |
 | `debconf_priority` | unset | `low`, `medium`, `high` or `critical` |
 
-```toml
-[build]
-repository_keys = ["./assets/myrepo.gpg"]
-extra_repositories = [
-  "deb [signed-by=/usr/share/keyrings/myrepo.gpg] https://repo.example.com/debian stable main",
-]
-```
-
 Key files must be named with letters, digits, `.`, `_` or `-`, and end in
 `.gpg`, `.asc` or `.pgp`. They are placed in `config/archives/` so apt can use
 them while installing packages, and are also copied with the same file name
 into `/usr/share/keyrings/` in the image for `signed-by=` entries.
+
+By default, extra repositories are used **only while packages are being
+installed** and are not left in the finished image's sources list. Set
+`repositories_in_image = true` if the live system should also be able to use
+that mirror with `apt`. Keys listed in `repository_keys` stay in
+`/usr/share/keyrings/`.
+
+```toml
+[build]
+repositories_in_image = true
+extra_repositories = [
+  "deb [signed-by=/usr/share/keyrings/myrepo.gpg] https://repo.example.com/debian stable main",
+]
+repository_keys = ["./assets/myrepo.gpg"]
+```
 
 ### `[apt]` — APT behaviour
 
@@ -314,9 +343,22 @@ into `/usr/share/keyrings/` in the image for `signed-by=` entries.
 | `options` | empty | One string passed to APT, e.g. `--no-install-recommends` |
 | `pipeline` | unset | APT pipeline depth |
 | `keyring_packages` | empty | Keyring packages installed for APT |
+| `preferences` | empty | APT pinning, written verbatim to `config/archives/frosted.pref` |
 
 `[build] apt_recommends` and `[build] apt_proxy` remain the settings for
 recommends and the HTTP proxy.
+
+When mixing repositories, pin priorities explicitly so an unexpected
+version does not win.
+
+```toml
+[apt]
+preferences = '''
+Package: *
+Pin: release a=trixie
+Pin-Priority: 100
+'''
+```
 
 ### `[installer]` — Debian installer
 
@@ -350,6 +392,8 @@ bootloaders and the selected image layout. Try a small image first.
 | `initramfs_compression` | unset | `bzip2`, `gzip` or `lzma` |
 | `zsync` | unset | Generate zsync metadata for delta downloads |
 | `win32_loader` | unset | Include the legacy win32-loader |
+| `swap_file_path` | unset | Swap file to create inside the image, e.g. `/swapfile` |
+| `swap_file_size` | `512` | Swap file size in MB |
 
 ```toml
 [binary]
@@ -357,11 +401,15 @@ image_type = "iso-hybrid"
 squashfs_compression = "zstd"
 squashfs_compression_level = 19
 checksums = "sha256"
+swap_file_path = "/swapfile"
+swap_file_size = 1024
 ```
 
 `[build] compression` controls archive compression for tar/netboot/source
 images; `[binary] squashfs_compression` controls the live filesystem inside
-an ISO.
+an ISO. The swap file is stored inside the image, so it increases both the
+ISO size and the space used on the USB stick. It is meant for machines with
+little RAM.
 
 ## Command reference
 

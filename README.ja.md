@@ -199,9 +199,26 @@ KDE ではイメージ内にコピーされるだけで、自動設定は行い�
 | --- | --- |
 | `include` | 追加で入れるパッケージの配列 |
 | `exclude` | 明示的に削除するパッケージの配列 |
+| `local` | 同梱するホスト上の `.deb` の配列 |
 
 `exclude` はインストール後に `apt-get remove` します。依存関係をたどった
 自動削除はしないので、名指ししたものだけが消えます。
+
+`local` は自前でビルドしたパッケージを入れるときに使います。
+live-build が `config/packages.chroot/` からローカルリポジトリを作り、
+依存関係ごとインストールします。
+
+```toml
+[packages]
+local = [
+  "./debs/myapp_1.2.0_amd64.deb",
+  "./debs/myapp-data_1.2.0_all.deb",
+]
+```
+
+ファイル名は dpkg が付けた `_all.deb` または `_<アーキテクチャ>.deb` の
+ままにしてください。live-build はそれ以外の名前を拾わないため、検証で
+エラーにしています。
 
 ### `[ssh]`
 
@@ -260,6 +277,7 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | キー | 既定値 | 説明 |
 | --- | --- | --- |
 | `append` | 空 | 追加のカーネルパラメータ。`quiet splash toram` など |
+| `install_append` | 空 | インストーラーで導入したシステムに入れるカーネルパラメータ |
 | `persistence` | `false` | 永続化を有効にする |
 | `failsafe_noautologin` | `true` | failsafe メニューで自動ログインを切るか |
 
@@ -282,6 +300,10 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | `debootstrap_options` | 空 | そのまま debootstrap に渡す |
 | `extra_repositories` | 空 | 追加の APT リポジトリ (`deb ...` の行) |
 | `repository_keys` | 空 | 追加リポジトリ用の GPG 鍵。apt に登録し、`/usr/share/keyrings/` にもコピーする |
+| `repositories_in_image` | `false` | 追加リポジトリを完成イメージの sources.list にも残す |
+| `firmware_binary` | `false` | インストーラー側にもファームウェアを入れる |
+| `initsystem` | `systemd` | `systemd` / `sysvinit` / `none` |
+| `initramfs` | `live-boot` | `live-boot` / `none` |
 | `updates` | 未指定 | updates スイートを有効にする |
 | `backports` | 未指定 | backports を有効にする |
 | `proposed_updates` | 未指定 | proposed-updates を有効にする |
@@ -290,18 +312,24 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | `debconf_frontend` | 未指定 | `dialog` / `editor` / `noninteractive` / `readline` |
 | `debconf_priority` | 未指定 | `low` / `medium` / `high` / `critical` |
 
-```toml
-[build]
-repository_keys = ["./assets/myrepo.gpg"]
-extra_repositories = [
-  "deb [signed-by=/usr/share/keyrings/myrepo.gpg] https://repo.example.com/debian stable main",
-]
-```
-
 鍵のファイル名は半角英数字・`.`・`_`・`-` のみで、拡張子は
 `.gpg` / `.asc` / `.pgp` のいずれかにしてください。パッケージ導入時に
 apt が使えるよう `config/archives/` に置かれ、同じファイル名でイメージ内の
 `/usr/share/keyrings/` にもコピーされます (`signed-by=` 用)。
+
+追加リポジトリは既定では**パッケージ導入時だけ**使われ、完成イメージの
+`sources.list` には残りません。ライブ環境でも `apt` でそのミラーを使いたい
+ときは `repositories_in_image = true` にしてください。鍵は `repository_keys`
+に入れておけば `/usr/share/keyrings/` に残ります。
+
+```toml
+[build]
+repositories_in_image = true
+extra_repositories = [
+  "deb [signed-by=/usr/share/keyrings/myrepo.gpg] https://repo.example.com/debian stable main",
+]
+repository_keys = ["./assets/myrepo.gpg"]
+```
 
 ### `[apt]` — APT の挙動
 
@@ -314,9 +342,22 @@ apt が使えるよう `config/archives/` に置かれ、同じファイル名�
 | `options` | 空 | APT に渡す 1 つの文字列。例: `--no-install-recommends` |
 | `pipeline` | 未指定 | APT のパイプライン段数 |
 | `keyring_packages` | 空 | APT 用に導入する鍵パッケージ |
+| `preferences` | 空 | APT のピン留め。`config/archives/frosted.pref` にそのまま書く |
 
 推奨パッケージと HTTP プロキシは従来どおり `[build] apt_recommends` と
 `[build] apt_proxy` で指定します。
+
+複数のリポジトリを混ぜるときは、優先度を明示すると意図しない版が
+入るのを防げます。
+
+```toml
+[apt]
+preferences = '''
+Package: *
+Pin: release a=trixie
+Pin-Priority: 100
+'''
+```
 
 ### `[installer]` — Debian インストーラー
 
@@ -350,6 +391,8 @@ apt が使えるよう `config/archives/` に置かれ、同じファイル名�
 | `initramfs_compression` | 未指定 | `bzip2` / `gzip` / `lzma` |
 | `zsync` | 未指定 | 差分ダウンロード用の zsync を作る |
 | `win32_loader` | 未指定 | 旧式の win32-loader を入れる |
+| `swap_file_path` | 未指定 | イメージ内に作るスワップファイル。例: `/swapfile` |
+| `swap_file_size` | `512` | スワップファイルの大きさ (MB) |
 
 ```toml
 [binary]
@@ -357,10 +400,14 @@ image_type = "iso-hybrid"
 squashfs_compression = "zstd"
 squashfs_compression_level = 19
 checksums = "sha256"
+swap_file_path = "/swapfile"
+swap_file_size = 1024
 ```
 
 `[build] compression` は tar/netboot/source のアーカイブ圧縮、
 `[binary] squashfs_compression` は ISO 内のライブファイルシステムの圧縮です。
+スワップファイルはイメージの中に実体として入るので、その分 ISO と
+書き込んだ USB の使用量が増えます。RAM の少ない実機向けです。
 
 ## コマンド一覧
 

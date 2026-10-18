@@ -206,6 +206,33 @@ class CliOutputIsTranslatedTest(unittest.TestCase):
             _code, text = run_cli(["show", str(recipe)])
         self._assert_no_japanese("show", text)
 
+    def test_show_output_with_custom_packages_and_swap(self) -> None:
+        """新しい設定項目も英語で表示されること。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            deb = root / "hello_1.0_amd64.deb"
+            deb.write_bytes(b"deb")
+            recipe = root / "recipe.toml"
+            recipe.write_text(
+                "version = 1\n"
+                '[iso]\nname = "citest"\n'
+                "[packages]\n"
+                f'local = ["{deb.as_posix()}"]\n'
+                "[apt]\n"
+                "preferences = '''Package: *\n"
+                "Pin: release a=trixie\n"
+                "Pin-Priority: 100\n"
+                "'''\n"
+                "[boot]\n"
+                'install_append = "quiet"\n'
+                "[binary]\n"
+                'swap_file_path = "/swapfile"\n'
+                "swap_file_size = 1024\n",
+                encoding="utf-8",
+            )
+            _code, text = run_cli(["show", str(recipe)])
+        self._assert_no_japanese("show (追加設定)", text)
+
     def test_presets_output(self) -> None:
         _code, text = run_cli(["presets"])
         self._assert_no_japanese("presets", text)

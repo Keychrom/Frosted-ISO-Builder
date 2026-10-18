@@ -103,6 +103,9 @@ OPTION_ALIASES: dict[str, tuple[str, ...]] = {
     "iso_volume": ("--iso-volume",),
     "bootappend_live": ("--bootappend-live",),
     "bootappend_live_failsafe": ("--bootappend-live-failsafe",),
+    "bootappend_install": ("--bootappend-install",),
+    "swap_file_path": ("--swap-file-path",),
+    "swap_file_size": ("--swap-file-size",),
     "firmware_chroot": ("--firmware-chroot",),
     "firmware_binary": ("--firmware-binary",),
     "uefi_secure_boot": ("--uefi-secure-boot",),
@@ -355,6 +358,10 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
             "win32_loader",
             "true" if recipe.binary.win32_loader else "false",
         )
+    if recipe.binary.swap_file_path:
+        emit("swap_file_path", recipe.binary.swap_file_path)
+        if recipe.binary.swap_file_size is not None:
+            emit("swap_file_size", str(recipe.binary.swap_file_size))
     emit("bootloaders", " ".join(loaders))
     emit("archive_areas", " ".join(recipe.build.archive_areas))
     emit("mirror_bootstrap", recipe.build.mirror)
@@ -364,8 +371,8 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
         emit("mirror_chroot_security", recipe.build.security_mirror)
         emit("mirror_binary_security", recipe.build.security_mirror)
     emit("parent_distribution", recipe.iso.distribution)
-    emit("initramfs", "live-boot")
-    emit("initsystem", "systemd")
+    emit("initramfs", recipe.build.initramfs or "live-boot")
+    emit("initsystem", recipe.build.initsystem or "systemd")
     emit("system", "live")
     emit("debian_installer", recipe.installer.type or "none")
     if recipe.installer.gui is not None:
@@ -419,7 +426,10 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
     if recipe.build.cache:
         emit("cache_stages", "bootstrap chroot")
     emit("firmware_chroot", "true" if recipe.build.firmware else "false")
-    emit("firmware_binary", "false")
+    emit(
+        "firmware_binary",
+        "true" if recipe.build.firmware_binary else "false",
+    )
     emit("uefi_secure_boot", recipe.build.secure_boot)
     emit("iso_application", recipe.iso.resolved_application())
     emit("iso_volume", recipe.iso.resolved_label())
@@ -433,6 +443,9 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
     emit("utc_time", "true" if recipe.system.utc else "false")
     emit("bootappend_live", build_bootappend(recipe))
     emit("bootappend_live_failsafe", build_failsafe_append(recipe))
+    extra_install = _QUOTED_UNSAFE.sub("", recipe.boot.install_append).strip()
+    if extra_install:
+        emit("bootappend_install", extra_install)
     if recipe.build.apt_proxy:
         emit("apt_http_proxy", recipe.build.apt_proxy)
     if recipe.build.debootstrap_options:
@@ -509,6 +522,29 @@ def generate(recipe: Recipe) -> GenerationResult:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         created.append(target)
+
+    # live-build は config/packages.chroot/*_all.deb と
+    # *_<arch>.deb からローカルリポジトリを作り、依存関係ごと導入する。
+    for deb_path in recipe.packages.local:
+        source = recipe.resolve(deb_path)
+        target = workdir / "config" / "packages.chroot" / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        created.append(target)
+
+    if recipe.apt.preferences.strip():
+        # config/archives/*.pref はパッケージ導入前に preferences.d へ入り、
+        # 完成イメージにも残る (chroot 専用にしたいときは .pref.chroot)。
+        # ユーザーが書いたピン留めの内容は訳さず、ヘッダだけ翻訳する。
+        header = _generated(
+            f"# {GENERATED_BY} が生成しました。\n\n"
+        )
+        content = header + recipe.apt.preferences.strip() + "\n"
+        created.append(
+            _write_file(
+                workdir / "config" / "archives" / "frosted.pref", content, 0o644
+            )
+        )
 
     if recipe.installer.preseed and recipe.installer.type != "none":
         source = recipe.resolve(recipe.installer.preseed)
@@ -715,7 +751,12 @@ def _format_packages(packages: list[str]) -> str:
 
 
 def _archive_lists(recipe: Recipe) -> dict[str, str]:
-    """追加リポジトリ。設定されていなければ何も作らない。"""
+    """追加リポジトリ。設定されていなければ何も作らない。
+
+    `.list.chroot` はビルド中の chroot だけで使われ、完成イメージからは
+    取り除かれる。完成イメージでも apt を使えるようにしたい場合は
+    `.list` にする (live-build が binary ステージでも読み直す)。
+    """
     if not recipe.build.extra_repositories:
         return {}
     lines = [
@@ -725,7 +766,8 @@ def _archive_lists(recipe: Recipe) -> dict[str, str]:
         *recipe.build.extra_repositories,
         "",
     ]
-    return {"extra.list.chroot": "\n".join(lines)}
+    name = "extra.list" if recipe.build.repositories_in_image else "extra.list.chroot"
+    return {name: "\n".join(lines)}
 
 
 # --------------------------------------------------------------------------
@@ -1532,9 +1574,11 @@ sudo lb clean --purge  # 設定も含めて全部消す
 | --- | --- |
 | `auto/config` | `lb config` に渡す全オプション。ここが実質の設定本体 |
 | `config/package-lists/` | 入れるパッケージ (番号順に読み込まれる) |
+| `config/packages.chroot/` | 同梱するローカル .deb (依存関係ごと導入される) |
 | `config/includes.chroot/` | イメージにそのまま入れるファイル |
 | `config/hooks/live/` | ビルド中に chroot 内で走るスクリプト。番号順 |
 | `config/archives/` | 追加の APT リポジトリ |
+| `config/archives/frosted.pref` | APT のピン留め |
 | `{MANIFEST_NAME}` | このツールが生成したファイルの一覧 (掃除に使う) |
 
 ## ブートパラメータ
