@@ -5,6 +5,10 @@
 [![CI](https://github.com/Keychrom/Frosted-ISO-Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/Keychrom/Frosted-ISO-Builder/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+See [Feature overview and usage](FEATURES.md) for a task-oriented tour of
+everything the tool can do. The Japanese version is
+[here](FEATURES.ja.md).
+
 Build Debian live ISOs from **a single recipe file**.
 
 It wraps [live-build](https://wiki.debian.org/DebianLive). Using live-build
@@ -34,6 +38,7 @@ The UI is available in English and Japanese. It is detected from `LANG` /
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Try it in five minutes](#try-it-in-five-minutes)
+- [Feature overview and usage](FEATURES.md)
 - [Recipe reference](#recipe-reference)
 - [Command reference](#command-reference)
 - [Presets](#presets)
@@ -167,7 +172,7 @@ yesterday can break today. `sid` has no security archive, so
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `hostname` | same as `name` | Hostname |
+| `hostname` | `debian` (the wizard offers the ISO name) | Hostname |
 | `locale` | `en_US.UTF-8` | Locale, e.g. `ja_JP.UTF-8` |
 | `timezone` | `UTC` | e.g. `Asia/Tokyo` |
 | `keyboard_layout` | `us` | e.g. `jp` |

@@ -5,6 +5,9 @@
 [![CI](https://github.com/Keychrom/Frosted-ISO-Builder/actions/workflows/ci.yml/badge.svg)](https://github.com/Keychrom/Frosted-ISO-Builder/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+機能の全体像と用途別の使い方は [機能一覧と使い方](FEATURES.ja.md) に
+まとめています（[English](FEATURES.md)）。
+
 Debian の Live ISO を、**レシピ 1 枚**から作るツールです。
 
 live-build のラッパーです。live-build をそのまま使うと、`config/` ツリー・
@@ -30,6 +33,7 @@ GPG 署名) も作れるので、公開する ISO のリリース作業までこ
 - [必要な環境](#必要な環境)
 - [インストール](#インストール)
 - [5 分で試す](#5-分で試す)
+- [機能一覧と使い方](FEATURES.ja.md)
 - [レシピのリファレンス](#レシピのリファレンス)
 - [コマンド一覧](#コマンド一覧)
 - [プリセット](#プリセット)
@@ -167,7 +171,7 @@ sudo frosted build examples/minimal.toml
 
 | キー | 既定値 | 説明 |
 | --- | --- | --- |
-| `hostname` | 名前と同じ | ホスト名 |
+| `hostname` | `debian` (ウィザードでは ISO 名) | ホスト名 |
 | `locale` | `en_US.UTF-8` | ロケール。`ja_JP.UTF-8` など |
 | `timezone` | `UTC` | `Asia/Tokyo` など |
 | `keyboard_layout` | `us` | `jp` など |
