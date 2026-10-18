@@ -173,6 +173,33 @@ class TreeGenerationTest(unittest.TestCase):
             self.assertTrue(manifest.is_file())
             self.assertIn("auto/config", manifest.read_text(encoding="utf-8"))
 
+    def test_extra_packages_work_without_a_desktop(self) -> None:
+        """CUI でも desktop.extra_packages (言語パックなど) を入れられること。"""
+        recipe = _basic_recipe()
+        recipe.desktop.environment = "none"
+        recipe.desktop.extra_packages = ["fcitx5", "fonts-noto-cjk"]
+        with Project(recipe) as project:
+            project.generate()
+            root = project.workdir() / "config" / "package-lists"
+            extra = root / "15-extra.list.chroot"
+            self.assertTrue(extra.is_file())
+            text = extra.read_text(encoding="utf-8")
+            self.assertIn("fcitx5", text)
+            self.assertIn("fonts-noto-cjk", text)
+            self.assertFalse((root / "10-desktop.list.chroot").exists())
+
+    def test_extra_packages_are_not_duplicated_with_a_desktop(self) -> None:
+        recipe = _basic_recipe()
+        recipe.desktop.environment = "xfce"
+        recipe.desktop.extra_packages = ["fcitx5"]
+        with Project(recipe) as project:
+            project.generate()
+            root = project.workdir() / "config" / "package-lists"
+            desktop = (root / "10-desktop.list.chroot").read_text(encoding="utf-8")
+            extra = (root / "15-extra.list.chroot").read_text(encoding="utf-8")
+        self.assertNotIn("fcitx5", desktop)
+        self.assertIn("fcitx5", extra)
+
     def test_regeneration_removes_stale_files(self) -> None:
         """レシピから項目を消したら、生成物からも消えること。"""
         recipe = _basic_recipe()

@@ -722,7 +722,19 @@ def _package_lists(recipe: Recipe) -> list[tuple[str, str, int]]:
         lists.append(
             (
                 "10-desktop.list.chroot",
-                _format_packages(list(profile.packages) + recipe.desktop.extra_packages),
+                _format_packages(list(profile.packages)),
+                0o644,
+            )
+        )
+
+    # extra_packages はデスクトップ環境に依存しない追加パッケージ。
+    # CUI (environment = "none") でも言語パックなどを入れられるよう、
+    # デスクトップのリストとは分けて必ず出力する。
+    if recipe.desktop.extra_packages:
+        lists.append(
+            (
+                "15-extra.list.chroot",
+                _format_packages(recipe.desktop.extra_packages),
                 0o644,
             )
         )
