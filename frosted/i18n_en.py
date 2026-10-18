@@ -112,6 +112,10 @@ EN: dict[str, str] = {
     ),
     "必要なものをまとめて入れるには:": "To install everything needed at once:",
     "この環境ではビルドできません。": "This machine cannot build images.",
+    "ビルドできる環境です。": "This environment is ready to build.",
+    "警告が {count} 件ありますが、ビルドはできます。": (
+        "{count} warning(s), but the build can proceed."
+    ),
     "この環境でビルドできます。": "This machine can build images.",
     "レシピが指定されていないので、既定の設定で環境だけ確認します。": (
         "No recipe given, so only the environment was checked using default settings."
