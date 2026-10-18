@@ -598,6 +598,7 @@ EN: dict[str, str] = {
         "spaces and / are not."
     ),
     "コロンと改行は使えません。": "Colons and newlines are not allowed.",
+    "0 以上で指定してください。": "Specify 0 or greater.",
     "開発版 (testing/sid) です。"
     "ビルドや起動が壊れることがあります。": (
         "This is a development release (testing/sid). "
@@ -613,6 +614,9 @@ EN: dict[str, str] = {
     ),
     "security 更新は unstable 経由で入ります。": (
         "Security updates arrive through unstable."
+    ),
+    "インストーラーが none のため、preseed は使われません。": (
+        "The installer type is none, so the preseed file is not used."
     ),
     "デスクトップ環境が none のため、壁紙は設定されません。": (
         "The desktop environment is none, so the wallpaper is not applied."
@@ -857,6 +861,11 @@ PREFIXES: dict[str, str] = {
     "画像が見つかりません": "Image not found:",
     "壁紙に使えない形式です": "Unsupported wallpaper format:",
     "リポジトリの鍵が見つかりません": "Repository key not found:",
+    "preseed ファイルが見つかりません": "Preseed file not found:",
+    "未対応の APT バックエンドです": "Unsupported APT backend:",
+    "未対応のインストーラー種別です": "Unsupported installer type:",
+    "使えないリリース名です": "Invalid release name:",
+    "使えないフレーバー名です": "Invalid kernel flavour:",
     "鍵のファイル名に使えない文字があります": (
         "Invalid repository key file name:"
     ),

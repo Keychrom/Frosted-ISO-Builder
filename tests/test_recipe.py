@@ -184,6 +184,58 @@ class RecipeValidationTest(unittest.TestCase):
             )
         )
 
+    def test_bad_apt_backend_is_rejected(self) -> None:
+        self.assertIn(
+            "apt.backend",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "apt": {"backend": "yum"},
+                }
+            ),
+        )
+
+    def test_bad_installer_type_is_rejected(self) -> None:
+        self.assertIn(
+            "installer.type",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "installer": {"type": "floppy"},
+                }
+            ),
+        )
+
+    def test_missing_preseed_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIn(
+                "installer.preseed",
+                self._errors(
+                    {
+                        "version": 1,
+                        "iso": {"name": "x"},
+                        "installer": {
+                            "type": "live",
+                            "preseed": str(Path(tmp) / "missing.cfg"),
+                        },
+                    }
+                ),
+            )
+
+    def test_bad_kernel_flavour_is_rejected(self) -> None:
+        self.assertIn(
+            "kernel.flavours",
+            self._errors(
+                {
+                    "version": 1,
+                    "iso": {"name": "x"},
+                    "kernel": {"flavours": ["bad flavour"]},
+                }
+            ),
+        )
+
     def test_missing_repository_key_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data = {
@@ -385,6 +437,42 @@ class TomlRoundTripTest(unittest.TestCase):
         )
         loaded = self._roundtrip(original)
         self.assertEqual(loaded.user.fullname, "")
+
+    def test_apt_installer_kernel_roundtrip(self) -> None:
+        original = Recipe.from_dict(
+            {
+                "version": 1,
+                "iso": {"name": "x"},
+                "apt": {
+                    "backend": "apt-get",
+                    "secure": False,
+                    "source_archives": False,
+                    "indices": True,
+                    "options": "--no-install-recommends",
+                    "pipeline": 2,
+                    "keyring_packages": ["debian-archive-keyring"],
+                },
+                "installer": {
+                    "type": "live",
+                    "gui": False,
+                    "distribution": "trixie",
+                },
+                "kernel": {
+                    "packages": "linux-image",
+                    "flavours": ["amd64"],
+                },
+            }
+        )
+        loaded = self._roundtrip(original)
+        self.assertEqual(loaded.apt.backend, "apt-get")
+        self.assertFalse(loaded.apt.secure)
+        self.assertEqual(loaded.apt.pipeline, 2)
+        self.assertEqual(loaded.apt.keyring_packages, ["debian-archive-keyring"])
+        self.assertEqual(loaded.installer.type, "live")
+        self.assertFalse(loaded.installer.gui)
+        self.assertEqual(loaded.installer.distribution, "trixie")
+        self.assertEqual(loaded.kernel.packages, "linux-image")
+        self.assertEqual(loaded.kernel.flavours, ["amd64"])
 
     def test_wallpaper_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

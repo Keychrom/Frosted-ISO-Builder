@@ -34,6 +34,15 @@ KNOWN_ARCHIVE_AREAS = ("main", "contrib", "non-free", "non-free-firmware")
 KNOWN_COMPRESSION = ("xz", "gzip", "bzip2", "lzip", "none")
 KNOWN_BOOTLOADERS = ("syslinux", "grub-efi", "grub-pc", "grub-legacy")
 KNOWN_SECURE_BOOT = ("auto", "enable", "disable")
+KNOWN_APT_BACKENDS = ("apt", "apt-get", "aptitude")
+KNOWN_INSTALLER_TYPES = (
+    "none",
+    "cdrom",
+    "netinst",
+    "netboot",
+    "businesscard",
+    "live",
+)
 
 DEFAULT_MIRROR = "http://deb.debian.org/debian/"
 DEFAULT_SECURITY_MIRROR = "http://security.debian.org/debian-security/"
@@ -246,6 +255,37 @@ class BootSection:
 
 
 @dataclass
+class AptSection:
+    #: apt / apt-get / aptitude。空なら live-build の既定値。
+    backend: str = ""
+    secure: bool | None = None
+    source_archives: bool | None = None
+    indices: bool | None = None
+    #: --apt-options に渡す 1 つの文字列。
+    options: str = ""
+    pipeline: int | None = None
+    keyring_packages: list[str] = field(default_factory=list)
+
+
+@dataclass
+class InstallerSection:
+    #: none / cdrom / netinst / netboot / businesscard / live
+    type: str = "none"
+    gui: bool | None = None
+    distribution: str = ""
+    #: ホスト上の preseed ファイル。config/debian-installer/preseed.cfg に置く。
+    preseed: str = ""
+
+
+@dataclass
+class KernelSection:
+    #: --linux-packages に渡す値 (例: linux-image)
+    packages: str = ""
+    #: --linux-flavours に渡す値 (例: amd64 / 686-pae)
+    flavours: list[str] = field(default_factory=list)
+
+
+@dataclass
 class BuildSection:
     workdir: str = "build"
     mirror: str = DEFAULT_MIRROR
@@ -269,6 +309,12 @@ class BuildSection:
     #: extra_repositories で使う GPG 鍵 (ホスト上のパス)。
     #: /usr/share/keyrings/<ファイル名> にコピーされる。
     repository_keys: list[str] = field(default_factory=list)
+    #: live-build の updates / backports / proposed-updates / security / source
+    updates: bool | None = None
+    backports: bool | None = None
+    proposed_updates: bool | None = None
+    security: bool | None = None
+    source: bool | None = None
 
 
 # --------------------------------------------------------------------------
@@ -288,6 +334,9 @@ class Recipe:
     scripts: ScriptsSection = field(default_factory=ScriptsSection)
     boot: BootSection = field(default_factory=BootSection)
     build: BuildSection = field(default_factory=BuildSection)
+    apt: AptSection = field(default_factory=AptSection)
+    installer: InstallerSection = field(default_factory=InstallerSection)
+    kernel: KernelSection = field(default_factory=KernelSection)
 
     #: レシピファイルの場所。相対パスはここを基準に解決する。
     path: Path | None = None
@@ -369,6 +418,9 @@ class Recipe:
             "scripts",
             "boot",
             "build",
+            "apt",
+            "installer",
+            "kernel",
         }
         _reject_unknown(data, top_known, "", issues)
 
@@ -397,6 +449,11 @@ class Recipe:
         recipe.scripts = _scripts_from(_table(data, "scripts", issues), issues)
         recipe.boot = _boot_from(_table(data, "boot", issues), issues)
         recipe.build = _build_from(_table(data, "build", issues), issues)
+        recipe.apt = _apt_from(_table(data, "apt", issues), issues)
+        recipe.installer = _installer_from(
+            _table(data, "installer", issues), issues
+        )
+        recipe.kernel = _kernel_from(_table(data, "kernel", issues), issues)
 
         _validate_cross(recipe, issues)
         errors = [issue for issue in issues if issue.is_error]
@@ -536,6 +593,40 @@ class Recipe:
             }
         )
 
+        apt = _clean(
+            {
+                "backend": self.apt.backend,
+                "secure": self.apt.secure,
+                "source_archives": self.apt.source_archives,
+                "indices": self.apt.indices,
+                "options": self.apt.options,
+                "pipeline": self.apt.pipeline,
+                "keyring_packages": list(self.apt.keyring_packages),
+            }
+        )
+        if apt:
+            data["apt"] = apt
+
+        installer = _clean(
+            {
+                "type": "" if self.installer.type == "none" else self.installer.type,
+                "gui": self.installer.gui,
+                "distribution": self.installer.distribution,
+                "preseed": self.installer.preseed,
+            }
+        )
+        if installer:
+            data["installer"] = installer
+
+        kernel = _clean(
+            {
+                "packages": self.kernel.packages,
+                "flavours": list(self.kernel.flavours),
+            }
+        )
+        if kernel:
+            data["kernel"] = kernel
+
         data["build"] = _clean(
             {
                 "workdir": self.build.workdir,
@@ -553,6 +644,11 @@ class Recipe:
                 "debootstrap_options": self.build.debootstrap_options,
                 "extra_repositories": list(self.build.extra_repositories),
                 "repository_keys": list(self.build.repository_keys),
+                "updates": self.build.updates,
+                "backports": self.build.backports,
+                "proposed_updates": self.build.proposed_updates,
+                "security": self.build.security,
+                "source": self.build.source,
             }
         )
 
@@ -654,6 +750,36 @@ def _int_value(
     if isinstance(value, bool) or not isinstance(value, int):
         issues.append(Issue("error", f"{where}.{key}", "整数で書いてください。"))
         return default
+    return value
+
+
+def _optional_bool_value(
+    data: dict[str, Any], key: str, where: str, issues: list[Issue]
+) -> bool | None:
+    if key not in data:
+        return None
+    value = data[key]
+    if not isinstance(value, bool):
+        issues.append(
+            Issue(
+                "error",
+                f"{where}.{key}",
+                "true か false で書いてください。",
+            )
+        )
+        return None
+    return value
+
+
+def _optional_int_value(
+    data: dict[str, Any], key: str, where: str, issues: list[Issue]
+) -> int | None:
+    if key not in data:
+        return None
+    value = data[key]
+    if isinstance(value, bool) or not isinstance(value, int):
+        issues.append(Issue("error", f"{where}.{key}", "整数で書いてください。"))
+        return None
     return value
 
 
@@ -1167,6 +1293,11 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         "debootstrap_options",
         "extra_repositories",
         "repository_keys",
+        "updates",
+        "backports",
+        "proposed_updates",
+        "security",
+        "source",
     }
     _reject_unknown(data, known, "build", issues)
     section = BuildSection(
@@ -1195,6 +1326,13 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
         repository_keys=_list_value(
             data, "repository_keys", "build", issues
         ),
+        updates=_optional_bool_value(data, "updates", "build", issues),
+        backports=_optional_bool_value(data, "backports", "build", issues),
+        proposed_updates=_optional_bool_value(
+            data, "proposed_updates", "build", issues
+        ),
+        security=_optional_bool_value(data, "security", "build", issues),
+        source=_optional_bool_value(data, "source", "build", issues),
     )
     if not section.workdir.strip() or "\n" in section.workdir or "\r" in section.workdir:
         issues.append(
@@ -1275,6 +1413,105 @@ def _build_from(data: dict[str, Any], issues: list[Issue]) -> BuildSection:
 # --------------------------------------------------------------------------
 # セクションをまたぐ検証
 # --------------------------------------------------------------------------
+
+
+def _apt_from(data: dict[str, Any], issues: list[Issue]) -> AptSection:
+    known = {
+        "backend",
+        "secure",
+        "source_archives",
+        "indices",
+        "options",
+        "pipeline",
+        "keyring_packages",
+    }
+    _reject_unknown(data, known, "apt", issues)
+    section = AptSection(
+        backend=_str_value(data, "backend", "", "apt", issues),
+        secure=_optional_bool_value(data, "secure", "apt", issues),
+        source_archives=_optional_bool_value(
+            data, "source_archives", "apt", issues
+        ),
+        indices=_optional_bool_value(data, "indices", "apt", issues),
+        options=_str_value(data, "options", "", "apt", issues),
+        pipeline=_optional_int_value(data, "pipeline", "apt", issues),
+        keyring_packages=_list_value(
+            data, "keyring_packages", "apt", issues
+        ),
+    )
+    if section.backend and section.backend not in KNOWN_APT_BACKENDS:
+        issues.append(
+            Issue(
+                "error",
+                "apt.backend",
+                f"未対応の APT バックエンドです: {section.backend!r}",
+                hint=f"対応: {', '.join(KNOWN_APT_BACKENDS)}",
+            )
+        )
+    if section.pipeline is not None and section.pipeline < 0:
+        issues.append(
+            Issue("error", "apt.pipeline", "0 以上で指定してください。")
+        )
+    for name in section.keyring_packages:
+        if not RE_PACKAGE_NAME.match(name):
+            issues.append(
+                Issue(
+                    "error",
+                    "apt.keyring_packages",
+                    f"パッケージ名として不正です: {name!r}",
+                )
+            )
+    return section
+
+
+def _installer_from(
+    data: dict[str, Any], issues: list[Issue]
+) -> InstallerSection:
+    known = {"type", "gui", "distribution", "preseed"}
+    _reject_unknown(data, known, "installer", issues)
+    section = InstallerSection(
+        type=_str_value(data, "type", "none", "installer", issues),
+        gui=_optional_bool_value(data, "gui", "installer", issues),
+        distribution=_str_value(data, "distribution", "", "installer", issues),
+        preseed=_str_value(data, "preseed", "", "installer", issues),
+    )
+    if section.type not in KNOWN_INSTALLER_TYPES:
+        issues.append(
+            Issue(
+                "error",
+                "installer.type",
+                f"未対応のインストーラー種別です: {section.type!r}",
+                hint=f"対応: {', '.join(KNOWN_INSTALLER_TYPES)}",
+            )
+        )
+    if section.distribution and not RE_ISO_VERSION.match(section.distribution):
+        issues.append(
+            Issue(
+                "error",
+                "installer.distribution",
+                f"使えないリリース名です: {section.distribution!r}",
+            )
+        )
+    return section
+
+
+def _kernel_from(data: dict[str, Any], issues: list[Issue]) -> KernelSection:
+    known = {"packages", "flavours"}
+    _reject_unknown(data, known, "kernel", issues)
+    section = KernelSection(
+        packages=_str_value(data, "packages", "", "kernel", issues),
+        flavours=_list_value(data, "flavours", "kernel", issues),
+    )
+    for flavour in section.flavours:
+        if not re.match(r"^[A-Za-z0-9][A-Za-z0-9+._-]*$", flavour):
+            issues.append(
+                Issue(
+                    "error",
+                    "kernel.flavours",
+                    f"使えないフレーバー名です: {flavour!r}",
+                )
+            )
+    return section
 
 
 def _validate_cross(recipe: Recipe, issues: list[Issue]) -> None:
@@ -1409,6 +1646,26 @@ def _validate_cross(recipe: Recipe, issues: list[Issue]) -> None:
                     "ssh.authorized_keys",
                     f"公開鍵が見つかりません: {key_path}",
                     hint=f"探した場所: {candidate}",
+                )
+            )
+
+    if recipe.installer.preseed:
+        candidate = recipe.resolve(recipe.installer.preseed)
+        if not candidate.is_file():
+            issues.append(
+                Issue(
+                    "error",
+                    "installer.preseed",
+                    f"preseed ファイルが見つかりません: {recipe.installer.preseed}",
+                    hint=f"探した場所: {candidate}",
+                )
+            )
+        if recipe.installer.type == "none":
+            issues.append(
+                Issue(
+                    "warning",
+                    "installer.preseed",
+                    "インストーラーが none のため、preseed は使われません。",
                 )
             )
 
@@ -1590,7 +1847,8 @@ def _clean(
     return {
         key: value
         for key, value in table.items()
-        if key in keep or not (value == "" or value == [])
+        if key in keep
+        or (value is not None and not (value == "" or value == []))
     }
 
 

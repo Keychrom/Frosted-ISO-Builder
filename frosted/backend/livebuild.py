@@ -67,9 +67,24 @@ OPTION_ALIASES: dict[str, tuple[str, ...]] = {
     "initsystem": ("--initsystem",),
     "system": ("--system",),
     "debian_installer": ("--debian-installer",),
+    "debian_installer_gui": ("--debian-installer-gui",),
+    "debian_installer_distribution": ("--debian-installer-distribution",),
+    "debian_installer_preseedfile": ("--debian-installer-preseedfile",),
+    "updates": ("--updates",),
+    "backports": ("--backports",),
+    "proposed_updates": ("--proposed-updates",),
+    "security": ("--security",),
+    "source": ("--source",),
     "compression": ("--compression",),
     "apt_recommends": ("--apt-recommends",),
     "apt_http_proxy": ("--apt-http-proxy",),
+    "apt_backend": ("--apt",),
+    "apt_secure": ("--apt-secure",),
+    "apt_source_archives": ("--apt-source-archives",),
+    "apt_indices": ("--apt-indices",),
+    "apt_options": ("--apt-options",),
+    "apt_pipeline": ("--apt-pipeline",),
+    "keyring_packages": ("--keyring-packages",),
     "cache": ("--cache",),
     "cache_stages": ("--cache-stages",),
     "iso_application": ("--iso-application",),
@@ -86,6 +101,7 @@ OPTION_ALIASES: dict[str, tuple[str, ...]] = {
     "debootstrap_options": ("--debootstrap-options",),
     "memtest": ("--memtest",),
     "utc_time": ("--utc-time",),
+    "linux_packages": ("--linux-packages",),
     "linux_flavours": ("--linux-flavours",),
 }
 
@@ -320,10 +336,50 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
     emit("initramfs", "live-boot")
     emit("initsystem", "systemd")
     emit("system", "live")
-    # 純粋な Live メディアを作る。インストーラーは載せない。
-    emit("debian_installer", "none")
+    emit("debian_installer", recipe.installer.type or "none")
+    if recipe.installer.gui is not None:
+        emit(
+            "debian_installer_gui",
+            "true" if recipe.installer.gui else "false",
+        )
+    if recipe.installer.distribution:
+        emit("debian_installer_distribution", recipe.installer.distribution)
+    if recipe.installer.preseed and recipe.installer.type != "none":
+        # config/preseed/*.cfg は installer ステージで
+        # /install/preseed.cfg にまとめられる。起動時にそれを読ませる。
+        emit("debian_installer_preseedfile", "/preseed.cfg")
     emit("compression", recipe.build.compression)
     emit("apt_recommends", "true" if recipe.build.apt_recommends else "false")
+    if recipe.apt.backend:
+        emit("apt_backend", recipe.apt.backend)
+    if recipe.apt.secure is not None:
+        emit("apt_secure", "true" if recipe.apt.secure else "false")
+    if recipe.apt.source_archives is not None:
+        emit(
+            "apt_source_archives",
+            "true" if recipe.apt.source_archives else "false",
+        )
+    if recipe.apt.indices is not None:
+        emit("apt_indices", "true" if recipe.apt.indices else "false")
+    if recipe.apt.options:
+        emit("apt_options", recipe.apt.options)
+    if recipe.apt.pipeline is not None:
+        emit("apt_pipeline", str(recipe.apt.pipeline))
+    if recipe.apt.keyring_packages:
+        emit("keyring_packages", " ".join(recipe.apt.keyring_packages))
+    if recipe.build.updates is not None:
+        emit("updates", "true" if recipe.build.updates else "false")
+    if recipe.build.backports is not None:
+        emit("backports", "true" if recipe.build.backports else "false")
+    if recipe.build.proposed_updates is not None:
+        emit(
+            "proposed_updates",
+            "true" if recipe.build.proposed_updates else "false",
+        )
+    if recipe.build.security is not None:
+        emit("security", "true" if recipe.build.security else "false")
+    if recipe.build.source is not None:
+        emit("source", "true" if recipe.build.source else "false")
     emit("cache", "true" if recipe.build.cache else "false")
     if recipe.build.cache:
         emit("cache_stages", "bootstrap chroot")
@@ -346,6 +402,10 @@ def build_lb_args(recipe: Recipe) -> tuple[list[str], list[str]]:
         emit("apt_http_proxy", recipe.build.apt_proxy)
     if recipe.build.debootstrap_options:
         emit("debootstrap_options", recipe.build.debootstrap_options)
+    if recipe.kernel.packages:
+        emit("linux_packages", recipe.kernel.packages)
+    if recipe.kernel.flavours:
+        emit("linux_flavours", " ".join(recipe.kernel.flavours))
 
     warnings.extend(spellings.notes)
     return args, warnings
@@ -411,6 +471,15 @@ def generate(recipe: Recipe) -> GenerationResult:
     for key_path in recipe.build.repository_keys:
         source = recipe.resolve(key_path)
         target = workdir / "config" / "archives" / f"{source.stem}.key.chroot"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        created.append(target)
+
+    if recipe.installer.preseed and recipe.installer.type != "none":
+        source = recipe.resolve(recipe.installer.preseed)
+        # installer_preseed が config/preseed/*.cfg を連結して
+        # /install/preseed.cfg を作る。
+        target = workdir / "config" / "preseed" / "frosted.cfg"
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
         created.append(target)

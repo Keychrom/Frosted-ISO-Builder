@@ -202,6 +202,15 @@ class LbConfigAcceptanceTest(unittest.TestCase):
                 apply_preset(recipe, preset)
                 self._check(recipe)
 
+    def test_fully_loaded_recipe_is_accepted(self) -> None:
+        """APT・インストーラー・カーネル設定を含む全項目を lb config に通す。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            recipe = _fully_loaded_recipe()
+            recipe.path = Path(tmp) / "recipe.toml"
+            recipe.build.workdir = "build"
+            recipe.iso.name = "ci-full"
+            self._check(recipe)
+
     def test_rolling_distributions_are_accepted(self) -> None:
         for distribution in ("testing", "sid"):
             with self.subTest(distribution=distribution), tempfile.TemporaryDirectory() as tmp:
@@ -244,6 +253,23 @@ def _fully_loaded_recipe() -> Recipe:
     recipe.desktop.environment = "xfce"
     recipe.ssh.enable_server = True
     recipe.build.debootstrap_options = "--no-check-gpg"
+    recipe.build.updates = False
+    recipe.build.backports = False
+    recipe.build.proposed_updates = False
+    recipe.build.security = False
+    recipe.build.source = False
+    recipe.apt.backend = "apt"
+    recipe.apt.secure = False
+    recipe.apt.source_archives = False
+    recipe.apt.indices = False
+    recipe.apt.options = "--no-install-recommends"
+    recipe.apt.pipeline = 1
+    recipe.apt.keyring_packages = ["debian-archive-keyring"]
+    recipe.installer.type = "live"
+    recipe.installer.gui = False
+    recipe.installer.distribution = "trixie"
+    recipe.kernel.packages = "linux-image"
+    recipe.kernel.flavours = ["amd64"]
     return recipe
 
 

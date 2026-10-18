@@ -827,6 +827,73 @@ class AutoConfigExecutionTest(unittest.TestCase):
             self.assertEqual(args[args.index("--iso-volume") + 1], "MYLINUX")
 
 
+class AdvancedSettingsTest(unittest.TestCase):
+    def test_apt_installer_kernel_options_reach_lb(self) -> None:
+        recipe = _basic_recipe()
+        recipe.apt.backend = "apt-get"
+        recipe.apt.secure = False
+        recipe.apt.source_archives = False
+        recipe.apt.indices = True
+        recipe.apt.options = "--no-install-recommends"
+        recipe.apt.pipeline = 2
+        recipe.apt.keyring_packages = ["debian-archive-keyring"]
+        recipe.installer.type = "live"
+        recipe.installer.gui = False
+        recipe.installer.distribution = "trixie"
+        recipe.build.updates = False
+        recipe.build.backports = False
+        recipe.build.proposed_updates = False
+        recipe.build.security = False
+        recipe.build.source = False
+        recipe.kernel.packages = "linux-image"
+        recipe.kernel.flavours = ["amd64"]
+
+        argv, _ = build_lb_argv(recipe)
+        expected = {
+            "--apt": "apt-get",
+            "--apt-secure": "false",
+            "--apt-source-archives": "false",
+            "--apt-indices": "true",
+            "--apt-options": "--no-install-recommends",
+            "--apt-pipeline": "2",
+            "--keyring-packages": "debian-archive-keyring",
+            "--debian-installer": "live",
+            "--debian-installer-gui": "false",
+            "--debian-installer-distribution": "trixie",
+            "--updates": "false",
+            "--backports": "false",
+            "--proposed-updates": "false",
+            "--security": "false",
+            "--source": "false",
+            "--linux-packages": "linux-image",
+            "--linux-flavours": "amd64",
+        }
+        for flag, value in expected.items():
+            with self.subTest(flag=flag):
+                self.assertEqual(argv[argv.index(flag) + 1], value)
+
+    def test_preseed_is_copied_for_the_installer(self) -> None:
+        recipe = _basic_recipe()
+        recipe.installer.type = "live"
+        with Project(recipe) as project:
+            (project.root / "preseed.cfg").write_text(
+                "d-i keyboard-configuration/xkb-keymap select us\n",
+                encoding="utf-8",
+            )
+            recipe.installer.preseed = "preseed.cfg"
+            project.generate()
+            target = project.workdir() / "config" / "preseed" / "frosted.cfg"
+            self.assertTrue(target.is_file())
+            self.assertIn(
+                "keyboard-configuration", target.read_text(encoding="utf-8")
+            )
+            argv, _ = build_lb_argv(recipe)
+            self.assertEqual(
+                argv[argv.index("--debian-installer-preseedfile") + 1],
+                "/preseed.cfg",
+            )
+
+
 class RollingDistributionTest(unittest.TestCase):
     def test_testing_keeps_the_security_mirror(self) -> None:
         recipe = _basic_recipe()

@@ -282,6 +282,11 @@ Enable [`boot.persistence`](#persistence) if you need it to run only once.
 | `debootstrap_options` | empty | Passed straight through to debootstrap |
 | `extra_repositories` | empty | Additional APT repositories (`deb ...` lines) |
 | `repository_keys` | empty | GPG keys for those repositories, installed for apt and copied to `/usr/share/keyrings/` |
+| `updates` | unset | Enable the updates suite |
+| `backports` | unset | Enable backports |
+| `proposed_updates` | unset | Enable proposed updates |
+| `security` | unset | Enable the security suite (ignored for `sid`/`unstable`) |
+| `source` | unset | Also build source images |
 
 ```toml
 [build]
@@ -295,6 +300,40 @@ Key files must be named with letters, digits, `.`, `_` or `-`, and end in
 `.gpg`, `.asc` or `.pgp`. They are placed in `config/archives/` so apt can use
 them while installing packages, and are also copied with the same file name
 into `/usr/share/keyrings/` in the image for `signed-by=` entries.
+
+### `[apt]` — APT behaviour
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `backend` | unset | `apt`, `apt-get` or `aptitude` |
+| `secure` | unset | Verify repository signatures |
+| `source_archives` | unset | Include `deb-src` entries |
+| `indices` | unset | Keep package indices in the image |
+| `options` | empty | One string passed to APT, e.g. `--no-install-recommends` |
+| `pipeline` | unset | APT pipeline depth |
+| `keyring_packages` | empty | Keyring packages installed for APT |
+
+`[build] apt_recommends` and `[build] apt_proxy` remain the settings for
+recommends and the HTTP proxy.
+
+### `[installer]` — Debian installer
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `type` | `none` | `none`, `cdrom`, `netinst`, `netboot`, `businesscard` or `live` |
+| `gui` | unset | Use the graphical installer |
+| `distribution` | same as `iso.distribution` | Installer release |
+| `preseed` | empty | Host preseed file copied to `config/preseed/frosted.cfg` |
+
+The installer type must be compatible with `[build] binary_image`,
+bootloaders and the selected image layout. Try a small image first.
+
+### `[kernel]` — kernel packages
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `packages` | empty | e.g. `linux-image` |
+| `flavours` | empty | e.g. `["amd64"]` or `["686-pae"]` |
 
 ## Command reference
 

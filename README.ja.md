@@ -282,6 +282,11 @@ firstboot = ["./scripts/first-run.sh"]     # 初回起動時に実行
 | `debootstrap_options` | 空 | そのまま debootstrap に渡す |
 | `extra_repositories` | 空 | 追加の APT リポジトリ (`deb ...` の行) |
 | `repository_keys` | 空 | 追加リポジトリ用の GPG 鍵。apt に登録し、`/usr/share/keyrings/` にもコピーする |
+| `updates` | 未指定 | updates スイートを有効にする |
+| `backports` | 未指定 | backports を有効にする |
+| `proposed_updates` | 未指定 | proposed-updates を有効にする |
+| `security` | 未指定 | security スイートを有効にする (`sid`/`unstable` では無視) |
+| `source` | 未指定 | source イメージも作る |
 
 ```toml
 [build]
@@ -295,6 +300,40 @@ extra_repositories = [
 `.gpg` / `.asc` / `.pgp` のいずれかにしてください。パッケージ導入時に
 apt が使えるよう `config/archives/` に置かれ、同じファイル名でイメージ内の
 `/usr/share/keyrings/` にもコピーされます (`signed-by=` 用)。
+
+### `[apt]` — APT の挙動
+
+| キー | 既定値 | 説明 |
+| --- | --- | --- |
+| `backend` | 未指定 | `apt` / `apt-get` / `aptitude` |
+| `secure` | 未指定 | リポジトリの署名を検証するか |
+| `source_archives` | 未指定 | `deb-src` を含めるか |
+| `indices` | 未指定 | パッケージインデックスをイメージに残すか |
+| `options` | 空 | APT に渡す 1 つの文字列。例: `--no-install-recommends` |
+| `pipeline` | 未指定 | APT のパイプライン段数 |
+| `keyring_packages` | 空 | APT 用に導入する鍵パッケージ |
+
+推奨パッケージと HTTP プロキシは従来どおり `[build] apt_recommends` と
+`[build] apt_proxy` で指定します。
+
+### `[installer]` — Debian インストーラー
+
+| キー | 既定値 | 説明 |
+| --- | --- | --- |
+| `type` | `none` | `none` / `cdrom` / `netinst` / `netboot` / `businesscard` / `live` |
+| `gui` | 未指定 | グラフィカルインストーラーを使うか |
+| `distribution` | `iso.distribution` と同じ | インストーラーのリリース |
+| `preseed` | 空 | ホスト上の preseed。`config/preseed/frosted.cfg` にコピー |
+
+インストーラーの種別は `[build] binary_image`、ブートローダ、イメージ構成と
+噛み合っている必要があります。まず小さい構成で試してください。
+
+### `[kernel]` — カーネルパッケージ
+
+| キー | 既定値 | 説明 |
+| --- | --- | --- |
+| `packages` | 空 | 例: `linux-image` |
+| `flavours` | 空 | 例: `["amd64"]` / `["686-pae"]` |
 
 ## コマンド一覧
 
