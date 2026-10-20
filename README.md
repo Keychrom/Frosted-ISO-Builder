@@ -623,6 +623,24 @@ sudo umount /mnt/persist
 
 ## Troubleshooting
 
+### `git pull` did not add a new command
+
+`install.sh` **copies** `frosted/` into `/usr/local/lib/frosted`. Pulling the
+repository does not update the installed copy. If `gui` is reported as an
+unknown command, reinstall from the updated clone.
+
+```sh
+cd Frosted-ISO-Builder
+git pull --ff-only origin main
+sudo ./install.sh
+hash -r
+frosted --version   # 0.6.0 or newer has the GUI
+frosted gui --help
+```
+
+Check `which -a frosted` in case an older installation earlier in `PATH` is
+being used. The command name is lowercase `frosted` (`Frosted` will not work).
+
 ### Run `frosted doctor` first
 
 It lists what is missing and how to fix it. Start there.

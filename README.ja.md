@@ -619,6 +619,26 @@ sudo umount /mnt/persist
 
 ## トラブルシューティング
 
+### `git pull` したのに新しいコマンドが無い
+
+`install.sh` は `frosted/` を `/usr/local/lib/frosted` に**コピー**します。
+リポジトリを `git pull` しても、インストール済みの本体は自動では更新されません。
+`gui` が無いと言われたときは、新しい方のリポジトリで install.sh を
+実行し直してください。
+
+```sh
+cd Frosted-ISO-Builder
+git pull --ff-only origin main
+sudo ./install.sh
+hash -r
+frosted --version   # 0.6.0 以降なら GUI 対応
+frosted gui --help
+```
+
+`which -a frosted` で、別の場所に入れた古い `frosted` が先に来ていないか
+確認してください。コマンド名は小文字の `frosted` です
+(`Frosted` では動きません)。
+
 ### `frosted doctor` を最初に走らせる
 
 足りないものと対処法が出ます。まずこれ。
