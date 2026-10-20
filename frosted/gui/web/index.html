@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="__FROSTED_LANG__">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="frosted-token" content="__FROSTED_TOKEN__">
+  <title>__FROSTED_TITLE__</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css?v=__FROSTED_ASSET_VERSION__">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">❄</span>
+      <span>Frosted ISO Builder</span>
+      <span id="version" class="version"></span>
+    </div>
+    <div class="pathbar">
+      <label for="recipe-path" id="recipe-path-label"></label>
+      <input id="recipe-path" spellcheck="false" autocomplete="off">
+      <button id="open-btn" class="ghost" type="button"></button>
+      <button id="new-btn" class="ghost" type="button"></button>
+    </div>
+    <div class="actions">
+      <span id="status" class="status" role="status"></span>
+      <span id="dirty" class="dirty" hidden></span>
+      <button id="generate-btn" class="ghost" type="button"></button>
+      <button id="save-btn" class="primary" type="button"></button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav id="nav" class="nav" aria-label="Sections"></nav>
+
+    <main class="main">
+      <div id="fatal" class="fatal" hidden></div>
+
+      <div id="form-panel" class="panel">
+        <div id="form-head" class="panel-head">
+          <h2 id="section-title"></h2>
+        </div>
+        <div id="form" class="form"></div>
+      </div>
+
+      <div id="raw-panel" class="panel" hidden>
+        <div class="panel-head">
+          <h2 id="raw-title"></h2>
+          <div class="row-actions">
+            <button id="raw-render-btn" class="ghost" type="button"></button>
+            <button id="raw-parse-btn" class="ghost" type="button"></button>
+            <button id="raw-save-btn" class="primary" type="button"></button>
+          </div>
+        </div>
+        <p id="raw-help" class="muted"></p>
+        <div id="raw-stale" class="notice" hidden></div>
+        <textarea id="raw-text" class="raw" spellcheck="false" aria-label="TOML"></textarea>
+      </div>
+
+      <div id="build-panel" class="panel" hidden>
+        <div class="panel-head">
+          <h2 id="build-title"></h2>
+        </div>
+        <p id="build-note" class="muted"></p>
+        <div id="commands" class="commands"></div>
+      </div>
+    </main>
+
+    <aside class="side">
+      <section class="card">
+        <h2 id="summary-title"></h2>
+        <div id="summary" class="summary"></div>
+        <button id="doctor-btn" class="ghost full" type="button"></button>
+      </section>
+      <section class="card">
+        <h2 id="issues-title"></h2>
+        <div id="issues" class="issues"></div>
+      </section>
+    </aside>
+  </div>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-body" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h2 id="modal-title"></h2>
+        <button class="icon" type="button" data-close aria-label="Close">×</button>
+      </div>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden role="status"></div>
+
+  <script src="/app.js?v=__FROSTED_ASSET_VERSION__"></script>
+</body>
+</html>

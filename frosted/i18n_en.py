@@ -198,6 +198,35 @@ EN: dict[str, str] = {
     "QEMU で ISO を起動してみる": "Try booting the ISO in QEMU",
     "配布された ISO を検証する": "Verify a distributed ISO",
     "プリセットの一覧を出す": "List the available presets",
+    "ブラウザでレシピを編集する": "Edit the recipe in a browser",
+    "ローカル Web UI を起動します。127.0.0.1 にだけ待ち受けます。": (
+        "Start the local web UI. It listens on 127.0.0.1 only."
+    ),
+    "開くレシピファイル (省略すると新規)": (
+        "Recipe file to open (omit to start a new one)"
+    ),
+    "待ち受けポート (既定: 8765。0 で空きポートを自動選択)": (
+        "Listening port (default: 8765; 0 picks a free port)"
+    ),
+    "ブラウザを自動で開かない": "Do not open the browser automatically",
+    "GUI を起動しました: {url}": "GUI started: {url}",
+    "終了するときは Ctrl-C を押してください。": (
+        "Press Ctrl-C to stop the GUI."
+    ),
+    "ブラウザを開けませんでした。上の URL を開いてください。": (
+        "Could not open the browser. Open the URL above manually."
+    ),
+    "GUI を終了しました。": "GUI stopped.",
+    "レシピが見つかりません: {path}": "Recipe not found: {path}",
+    ".toml ファイルのパスを指定してください。": "Specify the path to a .toml file.",
+    "GUI を起動できませんでした: {error}": "Could not start the GUI: {error}",
+    "ポート番号が不正です: {port}": "Invalid port number: {port}",
+    "0 から 65535 の範囲で指定してください。": (
+        "Specify a number between 0 and 65535."
+    ),
+    "--port で別のポートを指定してください。": (
+        "Specify a different port with --port."
+    ),
     "色を付けない (ログに落とすとき)": "Disable colour (useful when logging)",
     "UI の言語。en か ja": "UI language: en or ja",
     "UI の言語。en か ja (既定: 環境変数 LANG / LC_ALL / FROSTED_LANG から自動判定)": (

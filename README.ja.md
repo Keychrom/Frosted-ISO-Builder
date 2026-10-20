@@ -138,6 +138,17 @@ frosted test mylinux.toml
 sudo frosted build examples/minimal.toml
 ```
 
+対話ではなくブラウザで編集したいときは、ローカル GUI も使えます。
+
+```sh
+frosted gui mylinux.toml
+```
+
+`127.0.0.1` にだけ起動し、ブラウザが自動で開きます。フォームでレシピを
+編集し、検証・設定生成・環境診断まで行えます。ビルド自体は root が
+必要なので、画面に表示されるコマンドを端末で実行してください。
+`--no-browser` でブラウザを開かずに起動し、`--port` でポートを変更できます。
+
 ## レシピのリファレンス
 
 レシピは TOML です。書かなかった項目には既定値が入るので、
@@ -431,6 +442,7 @@ swap_file_size = 1024
 | コマンド | 説明 |
 | --- | --- |
 | `init` | 対話でレシピを作る |
+| `gui` | ブラウザでレシピを編集する |
 | `gen` | live-build の設定だけ生成する (**root 不要**) |
 | `build` | ISO をビルドする |
 | `validate` | レシピと環境を検証する |
@@ -731,6 +743,7 @@ python3 bin/frosted --help
 - **実際の live-build が生成した設定を受け付けること** (CI の
   `live-build` ジョブで `lb config` に食わせて確認)
 - 英語モードの出力に日本語が残っていないこと
+- GUI の HTTP API (認証、読み書き、検証、生成、診断)
 
 **未検証**
 

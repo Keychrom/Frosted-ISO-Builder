@@ -140,6 +140,19 @@ pipeline works. It builds a plain console-only Debian image in about ten minutes
 sudo frosted build examples/minimal.toml
 ```
 
+If you prefer editing in a browser instead of the terminal wizard, start the
+local GUI:
+
+```sh
+frosted gui mylinux.toml
+```
+
+It listens on `127.0.0.1` only and opens your browser. Edit the recipe in a
+form, validate it, generate the live-build configuration, and run the
+environment check. Building still needs root, so run the command shown in the
+GUI in a terminal. Use `--no-browser` to skip opening the browser and `--port`
+to change the port.
+
 ## Recipe reference
 
 Recipes are TOML. Anything you leave out gets a default, so you only write what
@@ -434,6 +447,7 @@ little RAM.
 | Command | Description |
 | --- | --- |
 | `init` | Create a recipe interactively |
+| `gui` | Edit the recipe in a browser |
 | `gen` | Generate the live-build configuration only (**no root needed**) |
 | `build` | Build the ISO |
 | `validate` | Check the recipe and the environment |
@@ -734,6 +748,8 @@ Being straight with you.
 - **That a real live-build accepts the generated configuration** (the CI
   `live-build` job feeds it to `lb config`)
 - That the English UI contains no leftover Japanese
+- The GUI HTTP API (authentication, reading and writing, validation,
+  generation and doctor)
 
 **Not verified**
 

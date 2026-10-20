@@ -8,6 +8,7 @@ For every key and its default, see the recipe reference in
 [README.md](README.md).
 
 - [Five-minute tour](#five-minute-tour)
+- [Browser GUI](#browser-gui)
 - [Feature map](#feature-map)
 - [ISO basics](#iso-basics)
 - [Locale, language and user](#locale-language-and-user)
@@ -60,6 +61,48 @@ live-build configuration without building (no root needed), run
 `frosted gen mylinux.toml`. To drive live-build directly, run
 `sudo lb build` in the generated `build/` directory; its `auto/config` is
 used automatically.
+
+## Browser GUI
+
+If you would rather not edit TOML by hand, use the local web UI.
+
+```sh
+# Open an existing recipe
+frosted gui mylinux.toml
+
+# Start from a new recipe
+frosted gui
+```
+
+It listens on `127.0.0.1` only and opens your browser. If another server is
+already using the port, it moves to the next free one automatically.
+
+The GUI lets you:
+
+- edit ISO, system, user, desktop, package, repository, boot/image,
+  installer, SSH/script and build settings in a form
+- see validation errors and warnings for each field as you type
+- inspect the `lb config` arguments, boot parameters and output file name
+- save the recipe (existing files get a `.bak` backup)
+- generate the configuration (like `frosted gen`) and run the environment
+  check (like `frosted doctor`)
+- edit TOML directly; saving from that tab preserves comments
+- see and copy the `sudo frosted build ...` command
+
+The GUI does not run the build itself. Building needs root and Debian, so run
+the displayed command in a terminal.
+
+Saving from the form normalizes the TOML and loses comments. Use the TOML tab
+if you want to keep them. Array settings such as `files.copy` and
+`files.write` are also edited in the TOML tab.
+
+The server binds to `127.0.0.1` only and uses a random per-run token plus
+Host header validation to keep other web pages from controlling it.
+`--no-browser` starts it without opening a browser, and `--port` changes the
+port.
+
+The GUI also runs on Windows and macOS for editing, validation and generation.
+Only building the ISO requires a Debian machine.
 
 ## Feature map
 
@@ -475,6 +518,7 @@ packages and settings freely.
 | Command | What it does | Common options |
 | --- | --- | --- |
 | `init` | Create a recipe interactively | `--preset`, `--name`, `--distribution`, `--arch`, `--yes` |
+| `gui` | Edit the recipe in a browser | `--port`, `--no-browser` |
 | `gen` | Generate the live-build configuration only (no root) | `--quiet` |
 | `build` | Build the ISO | `--sign`, `--no-checksum`, `--output`, `--skip-preflight` |
 | `validate` | Check the recipe and host | `--no-network`, `--no-root` |

@@ -257,6 +257,31 @@ def build_parser() -> argparse.ArgumentParser:
         "name", nargs="?", help="名前を指定すると、そのプリセットの詳細を出します"
     )
 
+    # --- gui ----------------------------------------------------------
+    gui_parser = subparsers.add_parser(
+        "gui",
+        help="ブラウザでレシピを編集する",
+        description="ローカル Web UI を起動します。127.0.0.1 にだけ待ち受けます。",
+    )
+    gui_parser.add_argument(
+        "recipe",
+        nargs="?",
+        metavar="レシピ",
+        help="開くレシピファイル (省略すると新規)",
+    )
+    gui_parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        metavar="PORT",
+        help="待ち受けポート (既定: 8765。0 で空きポートを自動選択)",
+    )
+    gui_parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="ブラウザを自動で開かない",
+    )
+
     return parser
 
 
@@ -932,6 +957,27 @@ def cmd_presets(args) -> int:
     return 0
 
 
+def cmd_gui(args) -> int:
+    """ローカル Web UI を起動する。"""
+    # GUI は http.server だけを使うので、CLI の起動を重くしないよう
+    # ここで遅延インポートする。
+    from .gui.server import serve
+
+    recipe = Path(args.recipe).expanduser() if args.recipe else None
+    try:
+        serve(
+            recipe,
+            port=args.port,
+            open_browser=not args.no_browser,
+        )
+    except OSError as exc:
+        raise BuildError(
+            t("GUI を起動できませんでした: {error}", error=exc),
+            hint=t("--port で別のポートを指定してください。"),
+        ) from exc
+    return 0
+
+
 def cmd_verify(args) -> int:
     """配布された ISO を検証する。
 
@@ -1090,6 +1136,7 @@ COMMANDS = {
     "test": cmd_test,
     "verify": cmd_verify,
     "presets": cmd_presets,
+    "gui": cmd_gui,
 }
 
 

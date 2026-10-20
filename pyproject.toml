@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frosted-iso-builder"
-version = "0.5.2"
+version = "0.6.0"
 description = "Build Debian Live ISOs from a single recipe file (a live-build wrapper)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,7 +39,8 @@ Source = "https://github.com/Keychrom/Frosted-ISO-Builder"
 Issues = "https://github.com/Keychrom/Frosted-ISO-Builder/issues"
 
 [tool.setuptools]
-packages = ["frosted", "frosted.backend"]
+packages = ["frosted", "frosted.backend", "frosted.gui"]
 
 [tool.setuptools.package-data]
 frosted = ["py.typed"]
+"frosted.gui" = ["web/*"]

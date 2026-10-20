@@ -8,6 +8,7 @@ Frosted ISO Builder は Debian Live ISO を TOML レシピ 1 枚から作るツ�
 「レシピのリファレンス」を参照してください。
 
 - [5 分で試す](#5-分で試す)
+- [ブラウザ GUI](#ブラウザ-gui)
 - [機能マップ](#機能マップ)
 - [ISO の基本情報](#iso-の基本情報)
 - [地域・言語・ユーザー](#地域言語ユーザー)
@@ -59,6 +60,47 @@ name = "mylinux"
 設定だけ生成して中身を確認したいときは `frosted gen mylinux.toml`
 （root 不要）、live-build を直接叩きたいときは生成された `build/` で
 `sudo lb build` を実行します（`auto/config` が自動で読まれます）。
+
+## ブラウザ GUI
+
+TOML を手で書かずに編集したいときは、ローカル Web UI を使えます。
+
+```sh
+# 既存のレシピを開く
+frosted gui mylinux.toml
+
+# 新規レシピから始める
+frosted gui
+```
+
+`127.0.0.1` にだけ待ち受け、ブラウザが自動で開きます。別のサーバーが
+ポートを使っている場合は、空いているポートへ自動で移ります。
+
+画面では次のことができます。
+
+- ISO・システム・ユーザー・デスクトップ・パッケージ・リポジトリ・
+  ブート/イメージ・インストーラー・SSH/スクリプト・ビルドの設定を
+  フォームで編集する
+- 入力しながら検証し、エラーと警告を項目ごとに表示する
+- `lb config` に渡る引数、ブートパラメータ、出力ファイル名を確認する
+- レシピを保存する (既存ファイルは `.bak` にバックアップ)
+- `frosted gen` 相当の設定生成と、`frosted doctor` 相当の環境診断
+- TOML を直接編集する。こちらから保存するとコメントも保持される
+- ビルド用の `sudo frosted build ...` コマンドを表示・コピーする
+
+ビルド自体は GUI から実行しません。root 権限と Debian が必要なので、
+表示されたコマンドを端末で実行してください。
+
+フォームから保存すると TOML は正規化され、コメントは失われます。
+コメントを残したいときは TOML タブで編集して保存してください。
+`files.copy` / `files.write` のような配列設定も TOML タブで編集します。
+
+GUI は `127.0.0.1` にだけバインドし、起動ごとのランダムなトークンと
+Host ヘッダの検証で、他の Web サイトからの操作を防いでいます。
+`--no-browser` でブラウザを開かずに起動でき、`--port` でポートを指定できます。
+
+GUI は Windows / macOS でも編集・検証・生成に使えます。ISO のビルドだけは
+Debian マシンで実行してください。
 
 ## 機能マップ
 
@@ -470,6 +512,7 @@ frosted init --preset kiosk --name lobby
 | コマンド | できること | よく使うオプション |
 | --- | --- | --- |
 | `init` | 対話でレシピを作る | `--preset` / `--name` / `--distribution` / `--arch` / `--yes` |
+| `gui` | ブラウザでレシピを編集 | `--port` / `--no-browser` |
 | `gen` | live-build の設定だけ生成 (root 不要) | `--quiet` |
 | `build` | ISO をビルド | `--sign` / `--no-checksum` / `--output` / `--skip-preflight` |
 | `validate` | レシピと環境を検証 | `--no-network` / `--no-root` |
